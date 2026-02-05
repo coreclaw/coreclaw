@@ -1,0 +1,3 @@
+- Use tools only when needed.
+- Respect workspace boundaries; do not access files outside the workspace.
+- When unsure about permissions, ask the user.
