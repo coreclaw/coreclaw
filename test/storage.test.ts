@@ -47,3 +47,24 @@ test("admin bootstrap usage flag is persisted in meta table", () => {
     fixture.cleanup();
   }
 });
+
+test("admin bootstrap security state is persisted in meta table", () => {
+  const fixture = createStorageFixture();
+  try {
+    assert.deepEqual(fixture.storage.getAdminBootstrapSecurityState(), {
+      failedAttempts: 0,
+      lockUntil: null
+    });
+    const lockUntil = "2030-01-01T00:00:00.000Z";
+    fixture.storage.setAdminBootstrapSecurityState({
+      failedAttempts: 3,
+      lockUntil
+    });
+    assert.deepEqual(fixture.storage.getAdminBootstrapSecurityState(), {
+      failedAttempts: 3,
+      lockUntil
+    });
+  } finally {
+    fixture.cleanup();
+  }
+});

@@ -65,6 +65,17 @@ const isPrivateAddress = (ip: string): boolean => {
   return true;
 };
 
+const getPort = (url: URL): number => {
+  if (url.port) {
+    const parsed = Number(url.port);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+      throw new Error("Invalid target port.");
+    }
+    return parsed;
+  }
+  return url.protocol === "https:" ? 443 : 80;
+};
+
 const isAllowedHostname = (hostname: string, allowedDomains: string[]): boolean => {
   if (allowedDomains.length === 0) {
     return true;
@@ -75,16 +86,26 @@ const isAllowedHostname = (hostname: string, allowedDomains: string[]): boolean 
     .some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
 };
 
-const assertPublicUrl = async (url: URL, allowedDomains: string[]) => {
+const assertPublicUrl = async (
+  url: URL,
+  rules: { allowedDomains: string[]; allowedPorts: number[]; blockedPorts: number[] }
+) => {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("Only http/https URLs are allowed.");
+  }
+  const port = getPort(url);
+  if (rules.blockedPorts.includes(port)) {
+    throw new Error(`Target port ${port} is blocked.`);
+  }
+  if (rules.allowedPorts.length > 0 && !rules.allowedPorts.includes(port)) {
+    throw new Error(`Target port ${port} is not in allowlist.`);
   }
 
   const hostname = url.hostname.toLowerCase();
   if (hostname === "localhost" || hostname.endsWith(".localhost")) {
     throw new Error("Localhost access is blocked.");
   }
-  if (!isAllowedHostname(hostname, allowedDomains)) {
+  if (!isAllowedHostname(hostname, rules.allowedDomains)) {
     throw new Error("Target host is not in allowlist.");
   }
 
@@ -153,7 +174,11 @@ export const webTools = (): ToolSpec<any>[] => {
     }),
     async run(args, ctx) {
       const url = new URL(args.url);
-      await assertPublicUrl(url, ctx.config.allowedWebDomains);
+      await assertPublicUrl(url, {
+        allowedDomains: ctx.config.allowedWebDomains,
+        allowedPorts: ctx.config.allowedWebPorts,
+        blockedPorts: ctx.config.blockedWebPorts
+      });
       const timeoutMs = args.timeoutMs ?? DEFAULT_TIMEOUT_MS;
       const maxResponseChars = args.maxResponseChars ?? DEFAULT_MAX_RESPONSE_CHARS;
 

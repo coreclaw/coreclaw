@@ -3,6 +3,22 @@ import path from "node:path";
 import dotenv from "dotenv";
 import { ConfigSchema, type Config } from "./schema.js";
 
+const parseCsv = (value?: string) =>
+  value
+    ? value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : undefined;
+
+const parseNumberCsv = (value?: string) => {
+  const parsed = parseCsv(value);
+  if (!parsed) {
+    return undefined;
+  }
+  return parsed.map((item) => Number(item));
+};
+
 const readJsonIfExists = (filePath: string): Record<string, unknown> => {
   if (!fs.existsSync(filePath)) {
     return {};
@@ -43,24 +59,22 @@ export const loadConfig = (): Config => {
     allowShell: process.env.COREBOT_ALLOW_SHELL
       ? process.env.COREBOT_ALLOW_SHELL === "true"
       : undefined,
-    allowedShellCommands: process.env.COREBOT_SHELL_ALLOWLIST
-      ? process.env.COREBOT_SHELL_ALLOWLIST.split(",")
-          .map((item) => item.trim())
-          .filter(Boolean)
-      : undefined,
-    allowedEnv: process.env.COREBOT_ALLOWED_ENV
-      ? process.env.COREBOT_ALLOWED_ENV.split(",")
-          .map((item) => item.trim())
-          .filter(Boolean)
-      : undefined,
-    allowedWebDomains: process.env.COREBOT_WEB_ALLOWLIST
-      ? process.env.COREBOT_WEB_ALLOWLIST.split(",")
-          .map((item) => item.trim().toLowerCase().replace(/^\*\./, ""))
-          .filter(Boolean)
-      : undefined,
+    allowedShellCommands: parseCsv(process.env.COREBOT_SHELL_ALLOWLIST),
+    allowedEnv: parseCsv(process.env.COREBOT_ALLOWED_ENV),
+    allowedWebDomains: parseCsv(process.env.COREBOT_WEB_ALLOWLIST)?.map((item) =>
+      item.toLowerCase().replace(/^\*\./, "")
+    ),
+    allowedWebPorts: parseNumberCsv(process.env.COREBOT_WEB_ALLOWED_PORTS),
+    blockedWebPorts: parseNumberCsv(process.env.COREBOT_WEB_BLOCKED_PORTS),
     adminBootstrapKey: process.env.COREBOT_ADMIN_BOOTSTRAP_KEY,
     adminBootstrapSingleUse: process.env.COREBOT_ADMIN_BOOTSTRAP_SINGLE_USE
       ? process.env.COREBOT_ADMIN_BOOTSTRAP_SINGLE_USE === "true"
+      : undefined,
+    adminBootstrapMaxAttempts: process.env.COREBOT_ADMIN_BOOTSTRAP_MAX_ATTEMPTS
+      ? Number(process.env.COREBOT_ADMIN_BOOTSTRAP_MAX_ATTEMPTS)
+      : undefined,
+    adminBootstrapLockoutMinutes: process.env.COREBOT_ADMIN_BOOTSTRAP_LOCKOUT_MINUTES
+      ? Number(process.env.COREBOT_ADMIN_BOOTSTRAP_LOCKOUT_MINUTES)
       : undefined,
     provider: {
       type: "openai",

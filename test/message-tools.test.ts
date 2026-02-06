@@ -93,3 +93,44 @@ test("chat.register can reuse bootstrap key when single-use is disabled", async 
     fixture.cleanup();
   }
 });
+
+test("chat.register locks bootstrap after repeated failures", async () => {
+  const fixture = createStorageFixture({
+    adminBootstrapKey: "secret",
+    adminBootstrapSingleUse: false,
+    adminBootstrapMaxAttempts: 2,
+    adminBootstrapLockoutMinutes: 10
+  });
+  try {
+    const chat = fixture.storage.upsertChat({ channel: "cli", chatId: "local" });
+    const tool = getRegisterTool();
+    const { context } = createToolContext({
+      config: fixture.config,
+      storage: fixture.storage,
+      workspaceDir: fixture.workspaceDir,
+      chatFk: chat.id,
+      chatRole: "normal",
+      chatId: "local",
+      channel: "cli"
+    });
+
+    await assert.rejects(
+      tool.run({ role: "admin", bootstrapKey: "bad-1" }, context),
+      /remaining before lockout/
+    );
+    await assert.rejects(
+      tool.run({ role: "admin", bootstrapKey: "bad-2" }, context),
+      /locked until/
+    );
+    await assert.rejects(
+      tool.run({ role: "admin", bootstrapKey: "secret" }, context),
+      /is locked until/
+    );
+
+    const state = fixture.storage.getAdminBootstrapSecurityState();
+    assert.equal(state.failedAttempts, 2);
+    assert.ok(state.lockUntil);
+  } finally {
+    fixture.cleanup();
+  }
+});

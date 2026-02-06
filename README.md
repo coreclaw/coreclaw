@@ -41,6 +41,9 @@ BRAVE_API_KEY=YOUR_KEY COREBOT_ALLOWED_ENV=BRAVE_API_KEY npm run dev
 
 # Restrict web.fetch to specific hosts/domains
 COREBOT_WEB_ALLOWLIST="example.com,api.example.com" npm run dev
+
+# Restrict web.fetch ports
+COREBOT_WEB_ALLOWED_PORTS="443,8443" COREBOT_WEB_BLOCKED_PORTS="8080" npm run dev
 ```
 
 Example prompts (in CLI):
@@ -78,8 +81,12 @@ You can configure via `config.json` or environment variables.
   "allowedShellCommands": [],
   "allowedEnv": [],
   "allowedWebDomains": [],
+  "allowedWebPorts": [],
+  "blockedWebPorts": [],
   "adminBootstrapKey": "",
   "adminBootstrapSingleUse": true,
+  "adminBootstrapMaxAttempts": 5,
+  "adminBootstrapLockoutMinutes": 15,
   "cli": { "enabled": true }
 }
 ```
@@ -104,14 +111,20 @@ You can configure via `config.json` or environment variables.
 - `COREBOT_SHELL_ALLOWLIST`
 - `COREBOT_ALLOWED_ENV`
 - `COREBOT_WEB_ALLOWLIST`
+- `COREBOT_WEB_ALLOWED_PORTS`
+- `COREBOT_WEB_BLOCKED_PORTS`
 - `COREBOT_ADMIN_BOOTSTRAP_KEY`
 - `COREBOT_ADMIN_BOOTSTRAP_SINGLE_USE`
+- `COREBOT_ADMIN_BOOTSTRAP_MAX_ATTEMPTS`
+- `COREBOT_ADMIN_BOOTSTRAP_LOCKOUT_MINUTES`
 
 Notes:
 - `COREBOT_ALLOWED_ENV` is default-deny. Include keys explicitly (for example `BRAVE_API_KEY`) for tools that need env access.
 - `COREBOT_SHELL_ALLOWLIST` matches executable names (for example `ls,git`), not full command prefixes.
 - `COREBOT_WEB_ALLOWLIST` restricts `web.fetch` target hosts (exact host or subdomain match).
+- `COREBOT_WEB_ALLOWED_PORTS` and `COREBOT_WEB_BLOCKED_PORTS` provide port allow/deny controls for `web.fetch`.
 - `COREBOT_ADMIN_BOOTSTRAP_SINGLE_USE=true` invalidates bootstrap elevation after first successful use.
+- `COREBOT_ADMIN_BOOTSTRAP_MAX_ATTEMPTS` and `COREBOT_ADMIN_BOOTSTRAP_LOCKOUT_MINUTES` control invalid-key lockout policy.
 
 ## Deployment Guide
 

@@ -58,15 +58,50 @@ export const messageTools = (): ToolSpec<any>[] => {
         if (!bootstrapKey) {
           throw new Error("Admin bootstrap is not configured.");
         }
-        if (args.bootstrapKey !== bootstrapKey) {
-          throw new Error("Invalid admin bootstrap key.");
-        }
         if (ctx.config.adminBootstrapSingleUse && ctx.storage.isAdminBootstrapUsed()) {
           throw new Error("Admin bootstrap key has already been used.");
         }
         if (ctx.storage.countAdminChats() > 0) {
           throw new Error("Admin already exists. Ask an admin to grant role.");
         }
+        const now = new Date();
+        const security = ctx.storage.getAdminBootstrapSecurityState();
+        const lockUntilMs = security.lockUntil
+          ? new Date(security.lockUntil).getTime()
+          : Number.NaN;
+        if (Number.isFinite(lockUntilMs) && lockUntilMs > now.getTime()) {
+          throw new Error(`Admin bootstrap is locked until ${security.lockUntil}.`);
+        }
+
+        if (args.bootstrapKey !== bootstrapKey) {
+          const nextFailed = security.failedAttempts + 1;
+          const maxAttempts = ctx.config.adminBootstrapMaxAttempts;
+          if (nextFailed >= maxAttempts) {
+            const lockUntil = new Date(
+              now.getTime() + ctx.config.adminBootstrapLockoutMinutes * 60_000
+            ).toISOString();
+            ctx.storage.setAdminBootstrapSecurityState({
+              failedAttempts: nextFailed,
+              lockUntil
+            });
+            throw new Error(
+              `Invalid admin bootstrap key. Too many failed attempts; locked until ${lockUntil}.`
+            );
+          }
+          ctx.storage.setAdminBootstrapSecurityState({
+            failedAttempts: nextFailed,
+            lockUntil: null
+          });
+          const remaining = maxAttempts - nextFailed;
+          throw new Error(
+            `Invalid admin bootstrap key. ${remaining} attempt(s) remaining before lockout.`
+          );
+        }
+
+        ctx.storage.setAdminBootstrapSecurityState({
+          failedAttempts: 0,
+          lockUntil: null
+        });
       }
 
       if (args.role && ctx.chat.role !== "admin" && args.role !== "admin") {

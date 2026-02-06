@@ -29,8 +29,12 @@ export const ConfigSchema = z.object({
   allowedShellCommands: z.array(z.string()).default([]),
   allowedEnv: z.array(z.string()).default([]),
   allowedWebDomains: z.array(z.string()).default([]),
+  allowedWebPorts: z.array(z.number().int().min(1).max(65535)).default([]),
+  blockedWebPorts: z.array(z.number().int().min(1).max(65535)).default([]),
   adminBootstrapKey: z.string().optional(),
   adminBootstrapSingleUse: z.boolean().default(true),
+  adminBootstrapMaxAttempts: z.number().int().min(1).max(20).default(5),
+  adminBootstrapLockoutMinutes: z.number().int().min(1).max(24 * 60).default(15),
   cli: z
     .object({
       enabled: z.boolean().default(true)

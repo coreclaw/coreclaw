@@ -45,6 +45,33 @@ export class SqliteStorage {
     this.setMeta("admin_bootstrap_used", used ? "1" : "0");
   }
 
+  getAdminBootstrapSecurityState(): {
+    failedAttempts: number;
+    lockUntil: string | null;
+  } {
+    const failedRaw = this.getMeta("admin_bootstrap_failed_attempts");
+    const failedAttempts = failedRaw ? Number(failedRaw) : 0;
+    const lockUntilRaw = this.getMeta("admin_bootstrap_lock_until");
+    const lockUntil =
+      lockUntilRaw && !Number.isNaN(new Date(lockUntilRaw).getTime()) ? lockUntilRaw : null;
+    return {
+      failedAttempts: Number.isFinite(failedAttempts) && failedAttempts > 0 ? failedAttempts : 0,
+      lockUntil
+    };
+  }
+
+  setAdminBootstrapSecurityState(state: { failedAttempts: number; lockUntil: string | null }) {
+    this.setMeta(
+      "admin_bootstrap_failed_attempts",
+      String(Math.max(0, Math.trunc(state.failedAttempts)))
+    );
+    if (state.lockUntil) {
+      this.setMeta("admin_bootstrap_lock_until", state.lockUntil);
+      return;
+    }
+    this.db.prepare("DELETE FROM meta WHERE key = ?").run("admin_bootstrap_lock_until");
+  }
+
   upsertChat(params: {
     channel: string;
     chatId: string;

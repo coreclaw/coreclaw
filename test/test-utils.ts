@@ -34,8 +34,12 @@ export const createConfig = (
     allowedShellCommands: [],
     allowedEnv: [],
     allowedWebDomains: [],
+    allowedWebPorts: [],
+    blockedWebPorts: [],
     adminBootstrapKey: undefined,
     adminBootstrapSingleUse: true,
+    adminBootstrapMaxAttempts: 5,
+    adminBootstrapLockoutMinutes: 15,
     cli: { enabled: false }
   };
 
