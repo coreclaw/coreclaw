@@ -58,6 +58,11 @@ COREBOT_WEB_ALLOWED_PORTS="443,8443" COREBOT_WEB_BLOCKED_PORTS="8080" pnpm run d
 COREBOT_ISOLATION_TOOLS="shell.exec,web.fetch,fs.write" pnpm run dev
 ```
 
+CLI queue ops:
+
+- `/dlq list [inbound|outbound|all] [limit]`
+- `/dlq replay <queueId|inbound|outbound|all> [limit]`
+
 Example prompts (in CLI):
 
 - “Schedule a daily summary at 9am.”
@@ -228,6 +233,7 @@ jobs:
 - `message.send`, `chat.register`, `chat.set_role`
 - `tasks.schedule`, `tasks.list`, `tasks.update`
 - `skills.list`, `skills.read`, `skills.enable`, `skills.disable`, `skills.enabled`
+- `bus.dead_letter.list`, `bus.dead_letter.replay` (admin only)
 
 ## Skills
 

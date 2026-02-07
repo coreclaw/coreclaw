@@ -43,6 +43,54 @@ export class MessageBus {
     this.outboundSignal.push(Date.now());
   }
 
+  listDeadLetterMessages(direction?: BusMessageDirection, limit = 100): BusQueueRecord[] {
+    return this.storage.listDeadLetterBusMessages(direction, limit);
+  }
+
+  replayDeadLetterMessages(params: {
+    queueId?: string;
+    direction?: BusMessageDirection;
+    limit?: number;
+  }): { replayed: number; ids: string[] } {
+    const now = nowIso();
+
+    if (params.queueId) {
+      const replayed = this.storage.replayDeadLetterBusMessage({
+        id: params.queueId,
+        now
+      });
+      if (!replayed) {
+        return { replayed: 0, ids: [] };
+      }
+      this.signalDirection(replayed.direction);
+      return { replayed: 1, ids: [replayed.id] };
+    }
+
+    const replayed = this.storage.replayDeadLetterBusMessages({
+      direction: params.direction,
+      limit: params.limit ?? 10,
+      now
+    });
+
+    let inboundSignaled = false;
+    let outboundSignaled = false;
+    for (const item of replayed) {
+      if (item.direction === "inbound" && !inboundSignaled) {
+        this.inboundSignal.push(Date.now());
+        inboundSignaled = true;
+      }
+      if (item.direction === "outbound" && !outboundSignaled) {
+        this.outboundSignal.push(Date.now());
+        outboundSignaled = true;
+      }
+    }
+
+    return {
+      replayed: replayed.length,
+      ids: replayed.map((item) => item.id)
+    };
+  }
+
   onInbound(handler: InboundHandler) {
     this.inboundHandlers.push(handler);
   }
@@ -222,6 +270,14 @@ export class MessageBus {
         recovered,
         "recovered stale processing bus messages"
       );
+    }
+  }
+
+  private signalDirection(direction: BusMessageDirection) {
+    if (direction === "inbound") {
+      this.inboundSignal.push(Date.now());
+    } else {
+      this.outboundSignal.push(Date.now());
     }
   }
 }

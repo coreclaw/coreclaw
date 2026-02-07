@@ -63,6 +63,10 @@ export class DefaultToolPolicyEngine implements ToolPolicyEngine {
       return deny("Only admin can set chat roles.");
     }
 
+    if (toolName.startsWith("bus.dead_letter.") && role !== "admin") {
+      return deny("Only admin can operate dead-letter queues.");
+    }
+
     if (toolName === "shell.exec" && role !== "admin") {
       return deny("Only admin can use shell.exec.");
     }

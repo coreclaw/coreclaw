@@ -313,6 +313,84 @@ export class SqliteStorage {
     }));
   }
 
+  replayDeadLetterBusMessage(params: {
+    id: string;
+    now: string;
+    reason?: string;
+  }): { id: string; direction: BusMessageDirection } | null {
+    const row = this.db
+      .prepare(
+        "SELECT id, direction FROM message_queue WHERE id = ? AND status = 'dead_letter'"
+      )
+      .get(params.id) as { id: string; direction: string } | undefined;
+    if (!row) {
+      return null;
+    }
+
+    const result = this.db
+      .prepare(
+        "UPDATE message_queue SET status = 'pending', attempts = 0, available_at = ?, updated_at = ?, claimed_at = NULL, processed_at = NULL, dead_lettered_at = NULL, last_error = ? WHERE id = ? AND status = 'dead_letter'"
+      )
+      .run(
+        params.now,
+        params.now,
+        params.reason ?? "Replayed from dead-letter queue.",
+        params.id
+      );
+    if (result.changes <= 0) {
+      return null;
+    }
+    return {
+      id: row.id,
+      direction: row.direction as BusMessageDirection
+    };
+  }
+
+  replayDeadLetterBusMessages(params: {
+    direction?: BusMessageDirection;
+    limit: number;
+    now: string;
+    reason?: string;
+  }): Array<{ id: string; direction: BusMessageDirection }> {
+    const rows = (params.direction
+      ? this.db
+          .prepare(
+            "SELECT id, direction FROM message_queue WHERE status = 'dead_letter' AND direction = ? ORDER BY dead_lettered_at DESC LIMIT ?"
+          )
+          .all(params.direction, params.limit)
+      : this.db
+          .prepare(
+            "SELECT id, direction FROM message_queue WHERE status = 'dead_letter' ORDER BY dead_lettered_at DESC LIMIT ?"
+          )
+          .all(params.limit)) as Array<{ id: string; direction: string }>;
+
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const replayed: Array<{ id: string; direction: BusMessageDirection }> = [];
+    for (const row of rows) {
+      const result = this.db
+        .prepare(
+          "UPDATE message_queue SET status = 'pending', attempts = 0, available_at = ?, updated_at = ?, claimed_at = NULL, processed_at = NULL, dead_lettered_at = NULL, last_error = ? WHERE id = ? AND status = 'dead_letter'"
+        )
+        .run(
+          params.now,
+          params.now,
+          params.reason ?? "Replayed from dead-letter queue.",
+          row.id
+        );
+      if (result.changes > 0) {
+        replayed.push({
+          id: row.id,
+          direction: row.direction as BusMessageDirection
+        });
+      }
+    }
+
+    return replayed;
+  }
+
   upsertChat(params: {
     channel: string;
     chatId: string;

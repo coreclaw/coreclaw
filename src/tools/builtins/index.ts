@@ -6,6 +6,7 @@ import { memoryTools } from "./memory.js";
 import { messageTools } from "./message.js";
 import { taskTools } from "./tasks.js";
 import { skillTools } from "./skills.js";
+import { busTools } from "./bus.js";
 
 export const builtInTools = (): ToolSpec<any>[] => [
   ...fsTools(),
@@ -14,5 +15,6 @@ export const builtInTools = (): ToolSpec<any>[] => [
   ...memoryTools(),
   ...messageTools(),
   ...taskTools(),
-  ...skillTools()
+  ...skillTools(),
+  ...busTools()
 ];

@@ -138,6 +138,7 @@ Unifies three tool sources:
 - **message.send / chat.register / chat.set_role**
 - **tasks.schedule / tasks.list / tasks.update**
 - **skills.list / skills.read**
+- **bus.dead_letter.list / bus.dead_letter.replay** (admin only)
 
 ---
 

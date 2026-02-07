@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ToolRegistry } from "../src/tools/registry.js";
 import { DefaultToolPolicyEngine } from "../src/tools/policy.js";
+import { busTools } from "../src/tools/builtins/bus.js";
 import { fsTools } from "../src/tools/builtins/fs.js";
 import { shellTools } from "../src/tools/builtins/shell.js";
 import { messageTools } from "../src/tools/builtins/message.js";
@@ -268,6 +269,32 @@ test("policy engine blocks MCP tools for normal role", async () => {
     await assert.rejects(
       registry.execute("mcp__demo__echo", {}, context),
       /Policy denied mcp__demo__echo/
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("policy engine blocks dead-letter operations for normal role", async () => {
+  const fixture = createStorageFixture();
+  try {
+    const chat = fixture.storage.upsertChat({ channel: "cli", chatId: "local" });
+    const registry = new ToolRegistry(new DefaultToolPolicyEngine());
+    for (const tool of busTools()) {
+      registry.register(tool);
+    }
+
+    const { context } = createToolContext({
+      config: fixture.config,
+      storage: fixture.storage,
+      workspaceDir: fixture.workspaceDir,
+      chatFk: chat.id,
+      chatRole: "normal"
+    });
+
+    await assert.rejects(
+      registry.execute("bus.dead_letter.list", {}, context),
+      /Policy denied bus\.dead_letter\.list/
     );
   } finally {
     fixture.cleanup();
