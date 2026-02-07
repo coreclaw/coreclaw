@@ -16,6 +16,13 @@ export class MessageBus {
   private outboundHandlers: OutboundHandler[] = [];
   private running = false;
   private logger: BusLogger | null = null;
+  private chatRateBuckets = new Map<
+    string,
+    {
+      windowStartMs: number;
+      count: number;
+    }
+  >();
 
   constructor(
     private storage: SqliteStorage,
@@ -26,28 +33,49 @@ export class MessageBus {
   }
 
   publishInbound(message: InboundMessage) {
-    const idempotencyKey = `${message.channel}:${message.chatId}:${message.id}`;
-    const queued = this.storage.enqueueBusMessage({
-      direction: "inbound",
-      payload: message,
-      maxAttempts: this.config.bus.maxAttempts,
-      idempotencyKey
-    });
-    if (queued.inserted || queued.status === "pending") {
-      this.inboundSignal.push(Date.now());
-    }
+    this.publishMessage("inbound", message);
   }
 
   publishOutbound(message: OutboundMessage) {
+    this.publishMessage("outbound", message);
+  }
+
+  private publishMessage(
+    direction: BusMessageDirection,
+    message: InboundMessage | OutboundMessage
+  ) {
+    const now = nowIso();
+    const flow = this.computeFlowControl(direction, message, now);
     const idempotencyKey = `${message.channel}:${message.chatId}:${message.id}`;
     const queued = this.storage.enqueueBusMessage({
-      direction: "outbound",
+      direction,
       payload: message,
       maxAttempts: this.config.bus.maxAttempts,
+      availableAt: flow.availableAt,
       idempotencyKey
     });
+
+    if (flow.dropReason && queued.inserted) {
+      this.storage.markBusMessageDeadLetter({
+        id: queued.queueId,
+        attempts: this.config.bus.maxAttempts,
+        error: flow.dropReason,
+        deadLetteredAt: now
+      });
+      this.logger?.warn(
+        {
+          direction,
+          queueId: queued.queueId,
+          chatId: message.chatId,
+          reason: flow.dropReason
+        },
+        "bus message dropped by flow control"
+      );
+      return;
+    }
+
     if (queued.inserted || queued.status === "pending") {
-      this.outboundSignal.push(Date.now());
+      this.signalDirection(direction);
     }
   }
 
@@ -290,6 +318,85 @@ export class MessageBus {
       this.inboundSignal.push(Date.now());
     } else {
       this.outboundSignal.push(Date.now());
+    }
+  }
+
+  private computeFlowControl(
+    direction: BusMessageDirection,
+    message: InboundMessage | OutboundMessage,
+    now: string
+  ): { availableAt?: string; dropReason?: string } {
+    const counts = this.storage.countBusMessagesByStatus(direction);
+    const queuedTotal = counts.pending + counts.processing;
+    const maxPending =
+      direction === "inbound"
+        ? this.config.bus.maxPendingInbound
+        : this.config.bus.maxPendingOutbound;
+
+    if (queuedTotal >= maxPending) {
+      return {
+        dropReason: `Queue overflow for ${direction}: ${queuedTotal}/${maxPending}`
+      };
+    }
+
+    const rateLimited = this.consumeRateBucket(
+      direction,
+      `${message.channel}:${message.chatId}`
+    );
+    if (rateLimited) {
+      return {
+        dropReason: rateLimited
+      };
+    }
+
+    if (queuedTotal >= this.config.bus.overloadPendingThreshold) {
+      return {
+        availableAt: new Date(Date.now() + this.config.bus.overloadBackoffMs).toISOString()
+      };
+    }
+
+    this.pruneRateBuckets(now);
+    return {};
+  }
+
+  private consumeRateBucket(
+    direction: BusMessageDirection,
+    chatKey: string
+  ): string | null {
+    const key = `${direction}:${chatKey}`;
+    const windowMs = this.config.bus.perChatRateLimitWindowMs;
+    const max = this.config.bus.perChatRateLimitMax;
+    const nowMs = Date.now();
+    const current = this.chatRateBuckets.get(key);
+
+    if (!current || nowMs - current.windowStartMs >= windowMs) {
+      this.chatRateBuckets.set(key, {
+        windowStartMs: nowMs,
+        count: 1
+      });
+      return null;
+    }
+
+    if (current.count >= max) {
+      const retryAfterMs = Math.max(0, windowMs - (nowMs - current.windowStartMs));
+      return `Rate limit exceeded for ${direction}:${chatKey}; retry after ${retryAfterMs}ms`;
+    }
+
+    current.count += 1;
+    this.chatRateBuckets.set(key, current);
+    return null;
+  }
+
+  private pruneRateBuckets(now: string) {
+    if (this.chatRateBuckets.size < 512) {
+      return;
+    }
+    const nowMs = new Date(now).getTime();
+    const ttlMs = this.config.bus.perChatRateLimitWindowMs * 2;
+    for (const [key, bucket] of this.chatRateBuckets.entries()) {
+      if (nowMs - bucket.windowStartMs > ttlMs) {
+        this.chatRateBuckets.delete(key);
+      }
     }
   }
 }

@@ -235,3 +235,163 @@ test("MessageBus deduplicates outbound publishes by message id", async () => {
     fixture.cleanup();
   }
 });
+
+test("MessageBus dead-letters new inbound messages when queue is full", async () => {
+  const fixture = createStorageFixture({
+    bus: {
+      pollMs: 20,
+      batchSize: 10,
+      maxAttempts: 3,
+      retryBackoffMs: 10,
+      maxRetryBackoffMs: 100,
+      processingTimeoutMs: 500,
+      maxPendingInbound: 1,
+      maxPendingOutbound: 10,
+      overloadPendingThreshold: 9,
+      overloadBackoffMs: 50,
+      perChatRateLimitWindowMs: 60_000,
+      perChatRateLimitMax: 100
+    }
+  });
+
+  const bus = new MessageBus(fixture.storage, fixture.config);
+  try {
+    bus.publishInbound({
+      id: "bp-1",
+      channel: "cli",
+      chatId: "local",
+      senderId: "user",
+      content: "first",
+      createdAt: new Date().toISOString()
+    });
+    bus.publishInbound({
+      id: "bp-2",
+      channel: "cli",
+      chatId: "local",
+      senderId: "user",
+      content: "second",
+      createdAt: new Date().toISOString()
+    });
+
+    const counts = fixture.storage.countBusMessagesByStatus("inbound");
+    assert.equal(counts.pending, 1);
+    assert.equal(counts.dead_letter, 1);
+    const dead = fixture.storage.listDeadLetterBusMessages("inbound", 10);
+    assert.equal(dead.length, 1);
+    assert.match(dead[0]?.lastError ?? "", /Queue overflow/);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("MessageBus applies overload backoff delay before dispatching", async () => {
+  const fixture = createStorageFixture({
+    bus: {
+      pollMs: 20,
+      batchSize: 10,
+      maxAttempts: 3,
+      retryBackoffMs: 10,
+      maxRetryBackoffMs: 100,
+      processingTimeoutMs: 500,
+      maxPendingInbound: 100,
+      maxPendingOutbound: 100,
+      overloadPendingThreshold: 1,
+      overloadBackoffMs: 250,
+      perChatRateLimitWindowMs: 60_000,
+      perChatRateLimitMax: 100
+    }
+  });
+
+  const bus = new MessageBus(fixture.storage, fixture.config);
+  try {
+    let calls = 0;
+    bus.onInbound(async () => {
+      calls += 1;
+    });
+
+    bus.publishInbound({
+      id: "ol-1",
+      channel: "cli",
+      chatId: "local",
+      senderId: "user",
+      content: "one",
+      createdAt: new Date().toISOString()
+    });
+    bus.publishInbound({
+      id: "ol-2",
+      channel: "cli",
+      chatId: "local",
+      senderId: "user",
+      content: "two",
+      createdAt: new Date().toISOString()
+    });
+
+    bus.start();
+    await waitUntil(() => calls >= 1);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.equal(calls, 1);
+    await waitUntil(() => calls >= 2, 2_000);
+  } finally {
+    bus.stop();
+    fixture.cleanup();
+  }
+});
+
+test("MessageBus enforces per-chat inbound rate limit", async () => {
+  const fixture = createStorageFixture({
+    bus: {
+      pollMs: 20,
+      batchSize: 10,
+      maxAttempts: 3,
+      retryBackoffMs: 10,
+      maxRetryBackoffMs: 100,
+      processingTimeoutMs: 500,
+      maxPendingInbound: 100,
+      maxPendingOutbound: 100,
+      overloadPendingThreshold: 80,
+      overloadBackoffMs: 10,
+      perChatRateLimitWindowMs: 10_000,
+      perChatRateLimitMax: 1
+    }
+  });
+
+  const bus = new MessageBus(fixture.storage, fixture.config);
+  try {
+    let calls = 0;
+    bus.onInbound(async () => {
+      calls += 1;
+    });
+
+    bus.publishInbound({
+      id: "rl-1",
+      channel: "cli",
+      chatId: "same",
+      senderId: "user",
+      content: "one",
+      createdAt: new Date().toISOString()
+    });
+    bus.publishInbound({
+      id: "rl-2",
+      channel: "cli",
+      chatId: "same",
+      senderId: "user",
+      content: "two",
+      createdAt: new Date().toISOString()
+    });
+
+    bus.start();
+    await waitUntil(() => calls >= 1);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    assert.equal(calls, 1);
+    const counts = fixture.storage.countBusMessagesByStatus("inbound");
+    assert.equal(counts.processed, 1);
+    assert.equal(counts.dead_letter, 1);
+    const dead = fixture.storage.listDeadLetterBusMessages("inbound", 10);
+    assert.equal(dead.length, 1);
+    assert.match(dead[0]?.lastError ?? "", /Rate limit exceeded/);
+  } finally {
+    bus.stop();
+    fixture.cleanup();
+  }
+});
