@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import Database from "better-sqlite3";
 import type { Config } from "../config/schema.js";
 import { migrations } from "./migrations.js";
@@ -23,31 +25,75 @@ export class SqliteStorage {
   }
 
   init() {
-    const metaExists = this.db
-      .prepare(
-        "SELECT 1 as ok FROM sqlite_master WHERE type = 'table' AND name = 'meta' LIMIT 1"
-      )
-      .get() as { ok: number } | undefined;
-    const currentVersion = metaExists
-      ? Number(
-          (this.db
-            .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
-            .get() as { value?: string } | undefined)?.value ?? "0"
-        ) || 0
-      : 0;
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS meta (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      );
+      CREATE TABLE IF NOT EXISTS migration_history (
+        id INTEGER PRIMARY KEY,
+        status TEXT NOT NULL,
+        applied_at TEXT NOT NULL,
+        error TEXT,
+        backup_path TEXT
+      );
+    `);
+
+    const currentVersion =
+      Number(
+        (this.db
+          .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
+          .get() as { value?: string } | undefined)?.value ?? "0"
+      ) || 0;
 
     const pending = migrations
       .slice()
       .sort((a, b) => a.id - b.id)
       .filter((migration) => migration.id > currentVersion);
+
+    if (pending.length === 0) {
+      const latest = migrations[migrations.length - 1]?.id ?? 0;
+      this.setMeta("schema_version", String(Math.max(currentVersion, latest)));
+      return;
+    }
+
+    const backupPath = this.createPreMigrationBackup(currentVersion);
+
     for (const migration of pending) {
-      this.db.exec(migration.sql);
+      const applyMigration = this.db.transaction(() => {
+        this.db.exec(migration.sql);
+        this.db
+          .prepare(
+            "INSERT INTO migration_history(id, status, applied_at, error, backup_path) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status, applied_at=excluded.applied_at, error=excluded.error, backup_path=excluded.backup_path"
+          )
+          .run(migration.id, "applied", nowIso(), null, backupPath);
+        this.setMeta("schema_version", String(migration.id));
+      });
+      try {
+        applyMigration();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.db
+          .prepare(
+            "INSERT INTO migration_history(id, status, applied_at, error, backup_path) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status, applied_at=excluded.applied_at, error=excluded.error, backup_path=excluded.backup_path"
+          )
+          .run(migration.id, "failed", nowIso(), message, backupPath);
+        this.setMeta("schema_last_failed_migration", String(migration.id));
+        this.setMeta("schema_last_failure_at", nowIso());
+        throw new Error(
+          backupPath
+            ? `Migration ${migration.id} failed: ${message}. Restore backup: ${backupPath}`
+            : `Migration ${migration.id} failed: ${message}.`
+        );
+      }
     }
 
     const latest = migrations[migrations.length - 1]?.id ?? 0;
+    this.setMeta("schema_version", String(latest));
+    this.setMeta("schema_last_migrated_at", nowIso());
     this.db
-      .prepare("INSERT OR REPLACE INTO meta(key, value) VALUES('schema_version', ?)")
-      .run(String(latest));
+      .prepare("DELETE FROM meta WHERE key IN ('schema_last_failed_migration', 'schema_last_failure_at')")
+      .run();
   }
 
   private getMeta(key: string): string | null {
@@ -61,6 +107,22 @@ export class SqliteStorage {
     this.db
       .prepare("INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)")
       .run(key, value);
+  }
+
+  private createPreMigrationBackup(currentVersion: number): string | null {
+    const sqlitePath = path.resolve(this.config.sqlitePath);
+    if (!fs.existsSync(sqlitePath)) {
+      return null;
+    }
+
+    const backupDir = path.resolve(this.config.dataDir, "backups");
+    fs.mkdirSync(backupDir, { recursive: true });
+    const stamp = nowIso().replace(/[:.]/g, "-");
+    const backupPath = path.join(backupDir, `pre-migration-v${currentVersion}-${stamp}.sqlite`);
+    const escaped = backupPath.replace(/'/g, "''");
+
+    this.db.exec(`VACUUM main INTO '${escaped}'`);
+    return backupPath;
   }
 
   isAdminBootstrapUsed(): boolean {
@@ -491,6 +553,33 @@ export class SqliteStorage {
       processedAt: row.processed_at,
       deadLetteredAt: row.dead_lettered_at,
       lastError: row.last_error
+    }));
+  }
+
+  listMigrationHistory(limit = 50): Array<{
+    id: number;
+    status: string;
+    appliedAt: string;
+    error: string | null;
+    backupPath: string | null;
+  }> {
+    const rows = this.db
+      .prepare(
+        "SELECT id, status, applied_at, error, backup_path FROM migration_history ORDER BY id DESC LIMIT ?"
+      )
+      .all(limit) as Array<{
+      id: number;
+      status: string;
+      applied_at: string;
+      error: string | null;
+      backup_path: string | null;
+    }>;
+    return rows.map((row) => ({
+      id: row.id,
+      status: row.status,
+      appliedAt: row.applied_at,
+      error: row.error,
+      backupPath: row.backup_path
     }));
   }
 

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { createStorageFixture } from "./test-utils.js";
 
 test("listTasks supports global listing without chat filter", () => {
@@ -64,6 +65,20 @@ test("admin bootstrap security state is persisted in meta table", () => {
       failedAttempts: 3,
       lockUntil
     });
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("migration history records applied migrations with backup path", () => {
+  const fixture = createStorageFixture();
+  try {
+    const history = fixture.storage.listMigrationHistory(20);
+    assert.ok(history.length >= 5);
+    assert.equal(history[0]?.status, "applied");
+    const backup = history[0]?.backupPath;
+    assert.ok(backup);
+    assert.equal(fs.existsSync(String(backup)), true);
   } finally {
     fixture.cleanup();
   }
