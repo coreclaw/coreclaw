@@ -116,6 +116,7 @@ export interface LlmProvider {
 - Max tool iterations (`maxToolIterations`, default 8).
 - Each tool call executed via `ToolRegistry.execute()`.
 - High-risk tools can run in a dedicated isolated worker process (`isolation` config).
+  - Current isolated built-ins: `shell.exec`, `web.fetch`, `fs.write`.
 - Tool output size capped (`maxToolOutputChars`).
 - Returns final response or a fallback if tool loop exhausts.
 
@@ -405,6 +406,7 @@ sequenceDiagram
 - `COREBOT_ALLOWED_ENV`
 - `COREBOT_ISOLATION_ENABLED`, `COREBOT_ISOLATION_TOOLS`
 - `COREBOT_ISOLATION_WORKER_TIMEOUT_MS`, `COREBOT_ISOLATION_MAX_WORKER_OUTPUT_CHARS`
+  - `COREBOT_ISOLATION_TOOLS` can include `shell.exec`, `web.fetch`, `fs.write`.
 - `COREBOT_HISTORY_MAX`, `COREBOT_MAX_TOOL_ITER`
 - `COREBOT_MCP_CONFIG`
 

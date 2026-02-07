@@ -14,6 +14,29 @@ type ShellExecRequest = {
   maxOutputChars: number;
 };
 
+type WebFetchPolicyRules = {
+  allowedDomains: string[];
+  allowedPorts: number[];
+  blockedPorts: number[];
+};
+
+type WebFetchRequest = {
+  url: string;
+  method: "GET" | "POST";
+  headers?: Record<string, string>;
+  body?: string;
+  timeoutMs: number;
+  maxResponseChars: number;
+  policy: WebFetchPolicyRules;
+};
+
+type FsWriteRequest = {
+  workspaceDir: string;
+  path: string;
+  content: string;
+  mode: "overwrite" | "append";
+};
+
 type WorkerRequest = {
   toolName: "shell.exec";
   request: {
@@ -24,6 +47,25 @@ type WorkerRequest = {
     allowedShellCommands: string[];
     env: Record<string, string>;
     maxOutputChars: number;
+  };
+} | {
+  toolName: "web.fetch";
+  request: {
+    url: string;
+    method: "GET" | "POST";
+    headers?: Record<string, string>;
+    body?: string;
+    timeoutMs: number;
+    maxResponseChars: number;
+    policy: WebFetchPolicyRules;
+  };
+} | {
+  toolName: "fs.write";
+  request: {
+    workspaceDir: string;
+    path: string;
+    content: string;
+    mode: "overwrite" | "append";
   };
 };
 
@@ -48,6 +90,7 @@ const DEFAULT_SYSTEM_ENV_KEYS = [
   "ComSpec",
   "PATHEXT"
 ];
+const DEFAULT_FS_WRITE_TIMEOUT_MS = 10_000;
 
 const appendWithLimit = (
   current: string,
@@ -120,6 +163,50 @@ export class IsolatedToolRuntime {
     };
 
     const response = await this.executeWorker(workerRequest, request.timeoutMs);
+    if (!response.ok) {
+      throw new Error(response.error);
+    }
+    return response.result;
+  }
+
+  async executeWebFetch(request: WebFetchRequest): Promise<string> {
+    const maxResponseChars = Math.max(
+      1_000,
+      Math.min(request.maxResponseChars, this.config.isolation.maxWorkerOutputChars)
+    );
+
+    const workerRequest: WorkerRequest = {
+      toolName: "web.fetch",
+      request: {
+        url: request.url,
+        method: request.method,
+        headers: request.headers,
+        body: request.body,
+        timeoutMs: request.timeoutMs,
+        maxResponseChars,
+        policy: request.policy
+      }
+    };
+
+    const response = await this.executeWorker(workerRequest, request.timeoutMs);
+    if (!response.ok) {
+      throw new Error(response.error);
+    }
+    return response.result;
+  }
+
+  async executeFsWrite(request: FsWriteRequest): Promise<string> {
+    const workerRequest: WorkerRequest = {
+      toolName: "fs.write",
+      request: {
+        workspaceDir: request.workspaceDir,
+        path: request.path,
+        content: request.content,
+        mode: request.mode
+      }
+    };
+
+    const response = await this.executeWorker(workerRequest, DEFAULT_FS_WRITE_TIMEOUT_MS);
     if (!response.ok) {
       throw new Error(response.error);
     }

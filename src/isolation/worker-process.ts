@@ -1,4 +1,14 @@
+import fs from "node:fs";
+import path from "node:path";
 import { spawn } from "node:child_process";
+import { assertPublicUrl, readBodyWithLimit } from "../tools/web-fetch-core.js";
+import { resolveWorkspacePath } from "../util/file.js";
+
+type WebFetchPolicyRules = {
+  allowedDomains: string[];
+  allowedPorts: number[];
+  blockedPorts: number[];
+};
 
 type WorkerRequest = {
   toolName: "shell.exec";
@@ -10,6 +20,25 @@ type WorkerRequest = {
     allowedShellCommands: string[];
     env: Record<string, string>;
     maxOutputChars: number;
+  };
+} | {
+  toolName: "web.fetch";
+  request: {
+    url: string;
+    method: "GET" | "POST";
+    headers?: Record<string, string>;
+    body?: string;
+    timeoutMs: number;
+    maxResponseChars: number;
+    policy: WebFetchPolicyRules;
+  };
+} | {
+  toolName: "fs.write";
+  request: {
+    workspaceDir: string;
+    path: string;
+    content: string;
+    mode: "overwrite" | "append";
   };
 };
 
@@ -110,6 +139,10 @@ const readStdin = async (): Promise<string> => {
 };
 
 const executeShell = async (request: WorkerRequest["request"]): Promise<string> => {
+  if (!("allowShell" in request)) {
+    throw new Error("invalid shell request payload");
+  }
+
   if (!request.allowShell) {
     throw new Error("Shell execution is disabled.");
   }
@@ -188,6 +221,55 @@ const executeShell = async (request: WorkerRequest["request"]): Promise<string> 
   });
 };
 
+const executeWebFetch = async (
+  request: Extract<WorkerRequest, { toolName: "web.fetch" }>["request"]
+): Promise<string> => {
+  const url = new URL(request.url);
+  await assertPublicUrl(url, {
+    allowedDomains: request.policy.allowedDomains,
+    allowedPorts: request.policy.allowedPorts,
+    blockedPorts: request.policy.blockedPorts
+  });
+
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), request.timeoutMs);
+
+  const response = await fetch(url.toString(), {
+    method: request.method,
+    headers: request.headers,
+    body: request.method === "POST" ? request.body : undefined,
+    signal: abort.signal,
+    redirect: "error"
+  }).finally(() => {
+    clearTimeout(timer);
+  });
+
+  const { body, truncated } = await readBodyWithLimit(response, request.maxResponseChars);
+  return JSON.stringify(
+    {
+      status: response.status,
+      headers: Object.fromEntries(response.headers.entries()),
+      body,
+      truncated
+    },
+    null,
+    2
+  );
+};
+
+const executeFsWrite = async (
+  request: Extract<WorkerRequest, { toolName: "fs.write" }>["request"]
+): Promise<string> => {
+  const target = resolveWorkspacePath(request.workspaceDir, request.path);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  if (request.mode === "append") {
+    fs.appendFileSync(target, request.content, "utf-8");
+  } else {
+    fs.writeFileSync(target, request.content, "utf-8");
+  }
+  return "ok";
+};
+
 const writeResponse = (response: WorkerResponse) => {
   process.stdout.write(JSON.stringify(response));
 };
@@ -196,10 +278,16 @@ const main = async () => {
   try {
     const raw = await readStdin();
     const request = JSON.parse(raw) as WorkerRequest;
-    if (request.toolName !== "shell.exec") {
-      throw new Error(`unsupported isolated tool: ${request.toolName}`);
+    let result = "";
+    if (request.toolName === "shell.exec") {
+      result = await executeShell(request.request);
+    } else if (request.toolName === "web.fetch") {
+      result = await executeWebFetch(request.request);
+    } else if (request.toolName === "fs.write") {
+      result = await executeFsWrite(request.request);
+    } else {
+      throw new Error(`unsupported isolated tool: ${(request as { toolName: string }).toolName}`);
     }
-    const result = await executeShell(request.request);
     writeResponse({
       ok: true,
       result

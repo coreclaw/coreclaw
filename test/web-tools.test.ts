@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { webTools } from "../src/tools/builtins/web.js";
+import { IsolatedToolRuntime } from "../src/isolation/runtime.js";
 import { createStorageFixture, createToolContext } from "./test-utils.js";
 
 const getTool = (name: string) => {
@@ -10,6 +11,17 @@ const getTool = (name: string) => {
   }
   return tool;
 };
+
+const createNoopLogger = () =>
+  ({
+    fatal: () => undefined,
+    error: () => undefined,
+    warn: () => undefined,
+    info: () => undefined,
+    debug: () => undefined,
+    trace: () => undefined,
+    child: () => createNoopLogger()
+  }) as any;
 
 test("web.fetch blocks localhost and private-network targets", async () => {
   const fixture = createStorageFixture();
@@ -55,6 +67,73 @@ test("web.fetch enforces host allowlist when configured", async () => {
       /not in allowlist/
     );
   } finally {
+    fixture.cleanup();
+  }
+});
+
+test("web.fetch isolated runtime enforces SSRF guards", async () => {
+  const fixture = createStorageFixture({
+    isolation: {
+      enabled: true,
+      toolNames: ["web.fetch"],
+      workerTimeoutMs: 30_000,
+      maxWorkerOutputChars: 250_000
+    }
+  });
+  const isolatedRuntime = new IsolatedToolRuntime(fixture.config, createNoopLogger());
+  try {
+    const chat = fixture.storage.upsertChat({ channel: "cli", chatId: "local" });
+    const { context } = createToolContext({
+      config: fixture.config,
+      storage: fixture.storage,
+      workspaceDir: fixture.workspaceDir,
+      chatFk: chat.id,
+      isolatedRuntime
+    });
+    const fetchTool = getTool("web.fetch");
+
+    await assert.rejects(
+      fetchTool.run({ url: "http://localhost:3000" }, context),
+      /Localhost access is blocked/
+    );
+    await assert.rejects(
+      fetchTool.run({ url: "http://127.0.0.1:8080" }, context),
+      /Private network access is blocked/
+    );
+  } finally {
+    await isolatedRuntime.shutdown();
+    fixture.cleanup();
+  }
+});
+
+test("web.fetch isolated runtime enforces allowlist policy", async () => {
+  const fixture = createStorageFixture({
+    allowedWebDomains: ["allowed.example.com"],
+    isolation: {
+      enabled: true,
+      toolNames: ["web.fetch"],
+      workerTimeoutMs: 30_000,
+      maxWorkerOutputChars: 250_000
+    }
+  });
+  const isolatedRuntime = new IsolatedToolRuntime(fixture.config, createNoopLogger());
+  try {
+    const chat = fixture.storage.upsertChat({ channel: "cli", chatId: "local" });
+    const { context } = createToolContext({
+      config: fixture.config,
+      storage: fixture.storage,
+      workspaceDir: fixture.workspaceDir,
+      chatFk: chat.id,
+      isolatedRuntime
+    });
+    const fetchTool = getTool("web.fetch");
+
+    await assert.rejects(
+      fetchTool.run({ url: "https://example.com" }, context),
+      /not in allowlist/
+    );
+  } finally {
+    await isolatedRuntime.shutdown();
     fixture.cleanup();
   }
 });

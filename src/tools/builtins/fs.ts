@@ -19,13 +19,23 @@ export const fsTools = (): ToolSpec<any>[] => {
 
   const writeTool: ToolSpec<z.ZodTypeAny> = {
     name: "fs.write",
-    description: "Write a text file within the workspace.",
+    description: "Write a text file within the workspace (isolated runtime optional).",
     schema: z.object({
       path: z.string(),
       content: z.string(),
       mode: z.enum(["overwrite", "append"]).default("overwrite")
     }),
     async run(args, ctx) {
+      const isolatedRuntime = ctx.isolatedRuntime;
+      if (isolatedRuntime?.isToolIsolated("fs.write")) {
+        return isolatedRuntime.executeFsWrite({
+          workspaceDir: ctx.workspaceDir,
+          path: args.path,
+          content: args.content,
+          mode: args.mode
+        });
+      }
+
       const target = resolveWorkspacePath(ctx.workspaceDir, args.path);
       fs.mkdirSync(path.dirname(target), { recursive: true });
       if (args.mode === "append") {

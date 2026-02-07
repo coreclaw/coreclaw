@@ -12,7 +12,7 @@ Single-process by default, tool- and skill-driven, MCP-ready, and safe-by-defaul
 - **SQLite storage** for chats, messages, summaries, and tasks
 - **Scheduler** with `cron | interval | once`
 - **CLI channel** for local usage (other channels stubbed)
-- **Isolated tool runtime** for high-risk tools (process sandbox v1)
+- **Isolated tool runtime** for high-risk tools (`shell.exec`, `web.fetch`, `fs.write`)
 
 ## Quick Start
 
@@ -53,6 +53,9 @@ COREBOT_WEB_ALLOWLIST="example.com,api.example.com" pnpm run dev
 
 # Restrict web.fetch ports
 COREBOT_WEB_ALLOWED_PORTS="443,8443" COREBOT_WEB_BLOCKED_PORTS="8080" pnpm run dev
+
+# Isolate multiple high-risk tools in worker process
+COREBOT_ISOLATION_TOOLS="shell.exec,web.fetch,fs.write" pnpm run dev
 ```
 
 Example prompts (in CLI):
@@ -142,7 +145,7 @@ Notes:
 - `COREBOT_SHELL_ALLOWLIST` matches executable names (for example `ls,git`), not full command prefixes.
 - `COREBOT_WEB_ALLOWLIST` restricts `web.fetch` target hosts (exact host or subdomain match).
 - `COREBOT_WEB_ALLOWED_PORTS` and `COREBOT_WEB_BLOCKED_PORTS` provide port allow/deny controls for `web.fetch`.
-- `COREBOT_ISOLATION_TOOLS` defaults to `shell.exec`; this tool runs in an isolated worker process with minimal env exposure.
+- `COREBOT_ISOLATION_TOOLS` defaults to `shell.exec`; add `web.fetch` and/or `fs.write` to isolate network and file-write execution as well.
 - `COREBOT_ADMIN_BOOTSTRAP_SINGLE_USE=true` invalidates bootstrap elevation after first successful use.
 - `COREBOT_ADMIN_BOOTSTRAP_MAX_ATTEMPTS` and `COREBOT_ADMIN_BOOTSTRAP_LOCKOUT_MINUTES` control invalid-key lockout policy.
 
