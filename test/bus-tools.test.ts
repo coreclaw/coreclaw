@@ -25,7 +25,7 @@ test("bus.dead_letter.list returns dead-letter records", async () => {
   const fixture = createStorageFixture();
   const bus = new MessageBus(fixture.storage, fixture.config);
   try {
-    const queueId = fixture.storage.enqueueBusMessage({
+    const queued = fixture.storage.enqueueBusMessage({
       direction: "inbound",
       payload: {
         id: "in-1",
@@ -38,7 +38,7 @@ test("bus.dead_letter.list returns dead-letter records", async () => {
       maxAttempts: 3
     });
     fixture.storage.markBusMessageDeadLetter({
-      id: queueId,
+      id: queued.queueId,
       attempts: 3,
       error: "manual dead-letter",
       deadLetteredAt: new Date().toISOString()
@@ -66,7 +66,7 @@ test("bus.dead_letter.list returns dead-letter records", async () => {
     );
     const parsed = JSON.parse(result) as Array<{ id: string; lastError: string | null }>;
     assert.equal(parsed.length, 1);
-    assert.equal(parsed[0]?.id, queueId);
+    assert.equal(parsed[0]?.id, queued.queueId);
     assert.match(parsed[0]?.lastError ?? "", /manual dead-letter/);
   } finally {
     bus.stop();
@@ -87,7 +87,7 @@ test("bus.dead_letter.replay requeues dead-lettered inbound and processes it", a
   });
   const bus = new MessageBus(fixture.storage, fixture.config);
   try {
-    const queueId = fixture.storage.enqueueBusMessage({
+    const queued = fixture.storage.enqueueBusMessage({
       direction: "inbound",
       payload: {
         id: "in-2",
@@ -100,7 +100,7 @@ test("bus.dead_letter.replay requeues dead-lettered inbound and processes it", a
       maxAttempts: 3
     });
     fixture.storage.markBusMessageDeadLetter({
-      id: queueId,
+      id: queued.queueId,
       attempts: 3,
       error: "always fails",
       deadLetteredAt: new Date().toISOString()
@@ -129,12 +129,12 @@ test("bus.dead_letter.replay requeues dead-lettered inbound and processes it", a
 
     const result = await registry.execute(
       "bus.dead_letter.replay",
-      { queueId },
+      { queueId: queued.queueId },
       context
     );
     const parsed = JSON.parse(result) as { replayed: number; ids: string[] };
     assert.equal(parsed.replayed, 1);
-    assert.deepEqual(parsed.ids, [queueId]);
+    assert.deepEqual(parsed.ids, [queued.queueId]);
 
     await waitUntil(() => handled >= 1);
 

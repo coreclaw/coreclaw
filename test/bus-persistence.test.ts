@@ -114,7 +114,7 @@ test("MessageBus recovers stale processing messages on startup", async () => {
 
   const bus = new MessageBus(fixture.storage, fixture.config);
   try {
-    const queueId = fixture.storage.enqueueBusMessage({
+    const queued = fixture.storage.enqueueBusMessage({
       direction: "inbound",
       payload: {
         id: "msg-3",
@@ -127,7 +127,7 @@ test("MessageBus recovers stale processing messages on startup", async () => {
       maxAttempts: 3
     });
     fixture.storage.claimBusMessage(
-      queueId,
+      queued.queueId,
       new Date(Date.now() - 2_000).toISOString()
     );
 
@@ -139,6 +139,97 @@ test("MessageBus recovers stale processing messages on startup", async () => {
     bus.start();
     await waitUntil(() => calls >= 1);
     assert.equal(fixture.storage.countBusMessagesByStatus("inbound").processed, 1);
+  } finally {
+    bus.stop();
+    fixture.cleanup();
+  }
+});
+
+test("MessageBus deduplicates inbound publishes by message id", async () => {
+  const fixture = createStorageFixture({
+    bus: {
+      pollMs: 20,
+      batchSize: 10,
+      maxAttempts: 3,
+      retryBackoffMs: 10,
+      maxRetryBackoffMs: 100,
+      processingTimeoutMs: 500
+    }
+  });
+
+  const bus = new MessageBus(fixture.storage, fixture.config);
+  try {
+    let calls = 0;
+    bus.onInbound(async () => {
+      calls += 1;
+    });
+
+    const message = {
+      id: "msg-dup-1",
+      channel: "cli",
+      chatId: "local",
+      senderId: "user",
+      content: "hello",
+      createdAt: new Date().toISOString()
+    };
+    bus.publishInbound(message);
+    bus.publishInbound(message);
+
+    bus.start();
+    await waitUntil(() => calls >= 1);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    assert.equal(calls, 1);
+    const counts = fixture.storage.countBusMessagesByStatus("inbound");
+    assert.equal(counts.processed, 1);
+    assert.equal(counts.pending, 0);
+    assert.equal(counts.processing, 0);
+    assert.equal(counts.dead_letter, 0);
+  } finally {
+    bus.stop();
+    fixture.cleanup();
+  }
+});
+
+test("MessageBus deduplicates outbound publishes by message id", async () => {
+  const fixture = createStorageFixture({
+    bus: {
+      pollMs: 20,
+      batchSize: 10,
+      maxAttempts: 3,
+      retryBackoffMs: 10,
+      maxRetryBackoffMs: 100,
+      processingTimeoutMs: 500
+    }
+  });
+
+  const bus = new MessageBus(fixture.storage, fixture.config);
+  try {
+    let calls = 0;
+    bus.onOutbound(async () => {
+      calls += 1;
+    });
+
+    const message = {
+      id: "out-dup-1",
+      channel: "cli",
+      chatId: "local",
+      content: "hello",
+      createdAt: new Date().toISOString()
+    };
+    bus.publishOutbound(message);
+    bus.publishOutbound(message);
+
+    bus.start();
+    await waitUntil(() => calls >= 1);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    assert.equal(calls, 1);
+    const counts = fixture.storage.countBusMessagesByStatus("outbound");
+    assert.equal(counts.processed, 1);
+    assert.equal(counts.pending, 0);
+    assert.equal(counts.processing, 0);
+    assert.equal(counts.dead_letter, 0);
   } finally {
     bus.stop();
     fixture.cleanup();

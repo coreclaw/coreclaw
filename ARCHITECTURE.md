@@ -70,6 +70,7 @@ flowchart TD
 ### 4.1 MessageBus
 - Async queue for inbound/outbound messages.
 - Simple, single-process, low overhead.
+- Idempotent publish by message id (duplicates collapse to the same queue record).
 
 ### 4.2 ConversationRouter
 - **Per-conversation serialization**: avoid concurrent message context races.

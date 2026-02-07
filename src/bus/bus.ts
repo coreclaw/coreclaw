@@ -26,21 +26,27 @@ export class MessageBus {
   }
 
   publishInbound(message: InboundMessage) {
-    this.storage.enqueueBusMessage({
+    const queued = this.storage.enqueueBusMessage({
       direction: "inbound",
       payload: message,
-      maxAttempts: this.config.bus.maxAttempts
+      maxAttempts: this.config.bus.maxAttempts,
+      idempotencyKey: message.id
     });
-    this.inboundSignal.push(Date.now());
+    if (queued.inserted || queued.status === "pending") {
+      this.inboundSignal.push(Date.now());
+    }
   }
 
   publishOutbound(message: OutboundMessage) {
-    this.storage.enqueueBusMessage({
+    const queued = this.storage.enqueueBusMessage({
       direction: "outbound",
       payload: message,
-      maxAttempts: this.config.bus.maxAttempts
+      maxAttempts: this.config.bus.maxAttempts,
+      idempotencyKey: message.id
     });
-    this.outboundSignal.push(Date.now());
+    if (queued.inserted || queued.status === "pending") {
+      this.outboundSignal.push(Date.now());
+    }
   }
 
   listDeadLetterMessages(direction?: BusMessageDirection, limit = 100): BusQueueRecord[] {

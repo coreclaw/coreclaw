@@ -88,5 +88,19 @@ export const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_message_queue_dead
         ON message_queue(status, dead_lettered_at);
     `
+  },
+  {
+    id: 3,
+    sql: `
+      CREATE TABLE IF NOT EXISTS message_dedupe (
+        direction TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        queue_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(direction, idempotency_key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_message_dedupe_queue
+        ON message_dedupe(queue_id);
+    `
   }
 ];

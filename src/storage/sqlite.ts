@@ -84,29 +84,94 @@ export class SqliteStorage {
     payload: unknown;
     maxAttempts: number;
     availableAt?: string;
-  }): string {
-    const id = newId();
+    idempotencyKey?: string;
+  }): { queueId: string; inserted: boolean; status: BusQueueRecord["status"] } {
     const now = nowIso();
-    this.db
-      .prepare(
-        "INSERT INTO message_queue(id, direction, payload, status, attempts, max_attempts, available_at, created_at, updated_at, claimed_at, processed_at, dead_lettered_at, last_error) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"
-      )
-      .run(
-        id,
-        params.direction,
-        JSON.stringify(params.payload),
-        "pending",
-        0,
-        params.maxAttempts,
-        params.availableAt ?? now,
-        now,
-        now,
-        null,
-        null,
-        null,
-        null
-      );
-    return id;
+    const idempotencyKey = params.idempotencyKey?.trim() || undefined;
+
+    const insertQueueRecord = (queueId: string) => {
+      this.db
+        .prepare(
+          "INSERT INTO message_queue(id, direction, payload, status, attempts, max_attempts, available_at, created_at, updated_at, claimed_at, processed_at, dead_lettered_at, last_error) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"
+        )
+        .run(
+          queueId,
+          params.direction,
+          JSON.stringify(params.payload),
+          "pending",
+          0,
+          params.maxAttempts,
+          params.availableAt ?? now,
+          now,
+          now,
+          null,
+          null,
+          null,
+          null
+        );
+    };
+
+    if (!idempotencyKey) {
+      const queueId = newId();
+      insertQueueRecord(queueId);
+      return {
+        queueId,
+        inserted: true,
+        status: "pending"
+      };
+    }
+
+    const loadExisting = () =>
+      this.db
+        .prepare(
+          "SELECT mq.id, mq.status FROM message_dedupe md JOIN message_queue mq ON mq.id = md.queue_id WHERE md.direction = ? AND md.idempotency_key = ?"
+        )
+        .get(params.direction, idempotencyKey) as
+        | { id: string; status: string }
+        | undefined;
+
+    const existing = loadExisting();
+    if (existing) {
+      return {
+        queueId: existing.id,
+        inserted: false,
+        status: existing.status as BusQueueRecord["status"]
+      };
+    }
+
+    const insertWithDedupe = this.db.transaction(() => {
+      const queueId = newId();
+      insertQueueRecord(queueId);
+      this.db
+        .prepare(
+          "INSERT INTO message_dedupe(direction, idempotency_key, queue_id, created_at) VALUES(?,?,?,?)"
+        )
+        .run(params.direction, idempotencyKey, queueId, now);
+      return queueId;
+    });
+
+    try {
+      const queueId = insertWithDedupe();
+      return {
+        queueId,
+        inserted: true,
+        status: "pending"
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes("UNIQUE constraint failed")) {
+        throw error;
+      }
+      const conflict = loadExisting();
+      if (!conflict) {
+        throw error;
+      }
+      return {
+        queueId: conflict.id,
+        inserted: false,
+        status: conflict.status as BusQueueRecord["status"]
+      };
+    }
   }
 
   listDueBusMessages(
