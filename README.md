@@ -1,6 +1,6 @@
 # Corebot
 
-Lightweight but capable TypeScript bot architecture inspired by NanoClaw + NanoBot patterns.
+Lightweight but capable TypeScript bot architecture.
 Single-process by default, tool- and skill-driven, MCP-ready, and safe-by-default.
 
 ## Features
@@ -419,6 +419,10 @@ src/
 - Container sandbox for tools
 - Additional provider adapters
 - Multi-instance coordination and queue partitioning
+
+## Inspiration
+
+Corebot is inspired by NanoClaw + NanoBot patterns.
 
 ---
 
