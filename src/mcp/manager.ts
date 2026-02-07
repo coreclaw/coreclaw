@@ -2,6 +2,7 @@ import fs from "node:fs";
 import type { ToolDefinition } from "../types.js";
 import type { McpConfigFile, McpServerConfig } from "./types.js";
 import type { Logger } from "pino";
+import { isMcpServerAllowed, isMcpToolAllowed } from "./allowlist.js";
 
 export type McpToolInfo = {
   server: string;
@@ -71,13 +72,19 @@ export class McpManager {
   private factory: McpClientFactory;
   private serverHealth = new Map<string, McpServerHealth>();
   private logger?: Pick<Logger, "warn" | "info" | "error" | "debug">;
+  private allowedServers: string[];
+  private allowedTools: string[];
 
   constructor(options?: {
     factory?: McpClientFactory;
     logger?: Pick<Logger, "warn" | "info" | "error" | "debug">;
+    allowedServers?: string[];
+    allowedTools?: string[];
   }) {
     this.factory = options?.factory ?? defaultClientFactory;
     this.logger = options?.logger;
+    this.allowedServers = options?.allowedServers ?? [];
+    this.allowedTools = options?.allowedTools ?? [];
   }
 
   async loadFromConfig(configPath: string): Promise<ToolDefinition[]> {
@@ -103,6 +110,10 @@ export class McpManager {
         if (serverConfig.disabled) {
           continue;
         }
+        if (!isMcpServerAllowed(this.allowedServers, name)) {
+          this.logger?.info({ server: name }, "MCP server skipped by allowlist");
+          continue;
+        }
 
         const { client } = await this.factory.createClient(serverConfig);
         this.clients.set(name, client);
@@ -122,6 +133,16 @@ export class McpManager {
           inputSchema?: Record<string, unknown>;
         }>) {
           const fullName = `mcp__${name}__${tool.name}`;
+          if (
+            !isMcpToolAllowed(this.allowedTools, {
+              fullName,
+              server: name,
+              tool: tool.name
+            })
+          ) {
+            this.logger?.info({ tool: fullName }, "MCP tool skipped by allowlist");
+            continue;
+          }
           const info: McpToolInfo = {
             server: name,
             name: tool.name,

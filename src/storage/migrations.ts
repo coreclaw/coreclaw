@@ -130,5 +130,27 @@ export const migrations: Migration[] = [
         ON task_runs(task_fk, inbound_id)
         WHERE inbound_id IS NOT NULL;
     `
+  },
+  {
+    id: 6,
+    sql: `
+      CREATE TABLE IF NOT EXISTS audit_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        at TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        tool_name TEXT,
+        chat_fk TEXT,
+        channel TEXT,
+        chat_id TEXT,
+        actor_role TEXT,
+        outcome TEXT NOT NULL,
+        reason TEXT,
+        args_json TEXT,
+        metadata_json TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_audit_events_at ON audit_events(at DESC);
+      CREATE INDEX IF NOT EXISTS idx_audit_events_type ON audit_events(event_type, at DESC);
+      CREATE INDEX IF NOT EXISTS idx_audit_events_chat ON audit_events(channel, chat_id, at DESC);
+    `
   }
 ];

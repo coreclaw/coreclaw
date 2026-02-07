@@ -583,6 +583,90 @@ export class SqliteStorage {
     }));
   }
 
+  insertAuditEvent(params: {
+    at: string;
+    eventType: string;
+    toolName?: string;
+    chatFk?: string;
+    channel?: string;
+    chatId?: string;
+    actorRole?: string;
+    outcome: string;
+    reason?: string;
+    argsJson?: string;
+    metadataJson?: string;
+  }) {
+    this.db
+      .prepare(
+        "INSERT INTO audit_events(at, event_type, tool_name, chat_fk, channel, chat_id, actor_role, outcome, reason, args_json, metadata_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+      )
+      .run(
+        params.at,
+        params.eventType,
+        params.toolName ?? null,
+        params.chatFk ?? null,
+        params.channel ?? null,
+        params.chatId ?? null,
+        params.actorRole ?? null,
+        params.outcome,
+        params.reason ?? null,
+        params.argsJson ?? null,
+        params.metadataJson ?? null
+      );
+  }
+
+  listAuditEvents(limit = 100, eventType?: string): Array<{
+    id: number;
+    at: string;
+    eventType: string;
+    toolName: string | null;
+    chatFk: string | null;
+    channel: string | null;
+    chatId: string | null;
+    actorRole: string | null;
+    outcome: string;
+    reason: string | null;
+    argsJson: string | null;
+    metadataJson: string | null;
+  }> {
+    const rows = (eventType
+      ? this.db
+          .prepare(
+            "SELECT * FROM audit_events WHERE event_type = ? ORDER BY at DESC, id DESC LIMIT ?"
+          )
+          .all(eventType, limit)
+      : this.db
+          .prepare("SELECT * FROM audit_events ORDER BY at DESC, id DESC LIMIT ?")
+          .all(limit)) as Array<{
+      id: number;
+      at: string;
+      event_type: string;
+      tool_name: string | null;
+      chat_fk: string | null;
+      channel: string | null;
+      chat_id: string | null;
+      actor_role: string | null;
+      outcome: string;
+      reason: string | null;
+      args_json: string | null;
+      metadata_json: string | null;
+    }>;
+    return rows.map((row) => ({
+      id: row.id,
+      at: row.at,
+      eventType: row.event_type,
+      toolName: row.tool_name,
+      chatFk: row.chat_fk,
+      channel: row.channel,
+      chatId: row.chat_id,
+      actorRole: row.actor_role,
+      outcome: row.outcome,
+      reason: row.reason,
+      argsJson: row.args_json,
+      metadataJson: row.metadata_json
+    }));
+  }
+
   replayDeadLetterBusMessage(params: {
     id: string;
     now: string;

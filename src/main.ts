@@ -54,7 +54,11 @@ const main = async () => {
   const skillLoader = new SkillLoader(config.skillsDir);
   const skills = skillLoader.listSkills();
 
-  const mcpManager = new McpManager({ logger });
+  const mcpManager = new McpManager({
+    logger,
+    allowedServers: config.allowedMcpServers,
+    allowedTools: config.allowedMcpTools
+  });
   const isolatedRuntime = new IsolatedToolRuntime(config, logger);
   const toolRegistry = new ToolRegistry(new DefaultToolPolicyEngine(), telemetry);
 

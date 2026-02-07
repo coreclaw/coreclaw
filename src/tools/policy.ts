@@ -2,6 +2,11 @@ import path from "node:path";
 import { validateWebTargetByPolicy } from "./web-guard.js";
 import type { ToolContext } from "./registry.js";
 import { resolveWorkspacePath } from "../util/file.js";
+import {
+  isMcpServerAllowed,
+  isMcpToolAllowed,
+  parseMcpToolFullName
+} from "../mcp/allowlist.js";
 
 export type PolicyDecision = {
   allowed: boolean;
@@ -160,6 +165,25 @@ export class DefaultToolPolicyEngine implements ToolPolicyEngine {
 
     if (toolName.startsWith("mcp__") && role !== "admin") {
       return deny("Only admin can execute MCP tools.");
+    }
+
+    if (toolName.startsWith("mcp__")) {
+      const parsed = parseMcpToolFullName(toolName);
+      if (!parsed) {
+        return deny("Invalid MCP tool name.");
+      }
+      if (!isMcpServerAllowed(ctx.config.allowedMcpServers, parsed.server)) {
+        return deny(`MCP server '${parsed.server}' is not allowed.`);
+      }
+      if (
+        !isMcpToolAllowed(ctx.config.allowedMcpTools, {
+          fullName: toolName,
+          server: parsed.server,
+          tool: parsed.tool
+        })
+      ) {
+        return deny(`MCP tool '${toolName}' is not allowed.`);
+      }
     }
 
     return allow();
