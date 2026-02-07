@@ -395,24 +395,6 @@ workspace/
     <skill-name>/SKILL.md
 ```
 
-## Project Structure
-
-```
-src/
-  main.ts
-  agent/
-  bus/
-  channels/
-  config/
-  mcp/
-  observability/
-  scheduler/
-  skills/
-  storage/
-  tools/
-  util/
-```
-
 ## Roadmap
 
 - WhatsApp / Telegram adapters
