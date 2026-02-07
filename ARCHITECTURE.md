@@ -279,6 +279,7 @@ erDiagram
 - **Shell execution** disabled by default (allowlist optional).
 - **Env filtering**: only allowlisted env vars available to tools.
 - **Policy guardrails**: non-admin `fs.write` cannot modify protected paths (`skills/`, `IDENTITY.md`, `TOOLS.md`, `USER.md`, `.mcp.json`).
+- **Isolation bulkhead + circuit breaker**: worker concurrency cap and per-tool fail-open cooldown.
 - **Tool output truncation** to avoid large prompts/logs.
 
 Optional container isolation can be added later for stronger protection.
@@ -408,6 +409,8 @@ sequenceDiagram
 - `COREBOT_ALLOWED_ENV`
 - `COREBOT_ISOLATION_ENABLED`, `COREBOT_ISOLATION_TOOLS`
 - `COREBOT_ISOLATION_WORKER_TIMEOUT_MS`, `COREBOT_ISOLATION_MAX_WORKER_OUTPUT_CHARS`
+- `COREBOT_ISOLATION_MAX_CONCURRENT_WORKERS`
+- `COREBOT_ISOLATION_OPEN_CIRCUIT_AFTER_FAILURES`, `COREBOT_ISOLATION_CIRCUIT_RESET_MS`
   - `COREBOT_ISOLATION_TOOLS` can include `shell.exec`, `web.fetch`, `fs.write`.
 - `COREBOT_HISTORY_MAX`, `COREBOT_MAX_TOOL_ITER`
 - `COREBOT_MCP_CONFIG`

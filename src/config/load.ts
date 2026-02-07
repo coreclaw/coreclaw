@@ -94,6 +94,15 @@ export const loadConfig = (): Config => {
         : undefined,
       maxWorkerOutputChars: process.env.COREBOT_ISOLATION_MAX_WORKER_OUTPUT_CHARS
         ? Number(process.env.COREBOT_ISOLATION_MAX_WORKER_OUTPUT_CHARS)
+        : undefined,
+      maxConcurrentWorkers: process.env.COREBOT_ISOLATION_MAX_CONCURRENT_WORKERS
+        ? Number(process.env.COREBOT_ISOLATION_MAX_CONCURRENT_WORKERS)
+        : undefined,
+      openCircuitAfterFailures: process.env.COREBOT_ISOLATION_OPEN_CIRCUIT_AFTER_FAILURES
+        ? Number(process.env.COREBOT_ISOLATION_OPEN_CIRCUIT_AFTER_FAILURES)
+        : undefined,
+      circuitResetMs: process.env.COREBOT_ISOLATION_CIRCUIT_RESET_MS
+        ? Number(process.env.COREBOT_ISOLATION_CIRCUIT_RESET_MS)
         : undefined
     },
     allowShell: process.env.COREBOT_ALLOW_SHELL

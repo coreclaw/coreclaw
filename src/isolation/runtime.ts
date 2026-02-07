@@ -1,5 +1,9 @@
 import fs from "node:fs";
-import { spawn, type ChildProcess } from "node:child_process";
+import {
+  spawn,
+  type ChildProcess,
+  type ChildProcessWithoutNullStreams
+} from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type { Logger } from "pino";
 import type { Config } from "../config/schema.js";
@@ -36,6 +40,8 @@ type FsWriteRequest = {
   content: string;
   mode: "overwrite" | "append";
 };
+
+type IsolatedToolName = "shell.exec" | "web.fetch" | "fs.write";
 
 type WorkerRequest = {
   toolName: "shell.exec";
@@ -129,6 +135,10 @@ const resolveWorkerEntrypoint = () => {
 
 export class IsolatedToolRuntime {
   private readonly activeWorkers = new Set<ChildProcess>();
+  private readonly slotWaiters: Array<() => void> = [];
+  private readonly consecutiveFailures = new Map<IsolatedToolName, number>();
+  private readonly circuitOpenUntilMs = new Map<IsolatedToolName, number>();
+  private inFlightWorkers = 0;
 
   constructor(
     private config: Config,
@@ -161,12 +171,7 @@ export class IsolatedToolRuntime {
         maxOutputChars
       }
     };
-
-    const response = await this.executeWorker(workerRequest, request.timeoutMs);
-    if (!response.ok) {
-      throw new Error(response.error);
-    }
-    return response.result;
+    return this.executeIsolatedRequest("shell.exec", workerRequest, request.timeoutMs);
   }
 
   async executeWebFetch(request: WebFetchRequest): Promise<string> {
@@ -187,12 +192,7 @@ export class IsolatedToolRuntime {
         policy: request.policy
       }
     };
-
-    const response = await this.executeWorker(workerRequest, request.timeoutMs);
-    if (!response.ok) {
-      throw new Error(response.error);
-    }
-    return response.result;
+    return this.executeIsolatedRequest("web.fetch", workerRequest, request.timeoutMs);
   }
 
   async executeFsWrite(request: FsWriteRequest): Promise<string> {
@@ -205,12 +205,7 @@ export class IsolatedToolRuntime {
         mode: request.mode
       }
     };
-
-    const response = await this.executeWorker(workerRequest, DEFAULT_FS_WRITE_TIMEOUT_MS);
-    if (!response.ok) {
-      throw new Error(response.error);
-    }
-    return response.result;
+    return this.executeIsolatedRequest("fs.write", workerRequest, DEFAULT_FS_WRITE_TIMEOUT_MS);
   }
 
   async shutdown(): Promise<void> {
@@ -257,10 +252,98 @@ export class IsolatedToolRuntime {
     return env;
   }
 
+  private async executeIsolatedRequest(
+    toolName: IsolatedToolName,
+    request: WorkerRequest,
+    commandTimeoutMs: number
+  ): Promise<string> {
+    this.ensureCircuitClosed(toolName);
+    try {
+      const response = await this.executeWorker(request, commandTimeoutMs);
+      if (!response.ok) {
+        throw new Error(response.error);
+      }
+      this.consecutiveFailures.set(toolName, 0);
+      return response.result;
+    } catch (error) {
+      this.recordFailure(toolName, error);
+      throw error;
+    }
+  }
+
+  private ensureCircuitClosed(toolName: IsolatedToolName) {
+    const openUntilMs = this.circuitOpenUntilMs.get(toolName);
+    if (!openUntilMs) {
+      return;
+    }
+
+    if (Date.now() >= openUntilMs) {
+      this.circuitOpenUntilMs.delete(toolName);
+      this.consecutiveFailures.set(toolName, 0);
+      this.logger.info(
+        {
+          toolName
+        },
+        "isolated runtime circuit closed after cooldown"
+      );
+      return;
+    }
+
+    throw new Error(
+      `Isolated runtime circuit open for ${toolName} until ${new Date(openUntilMs).toISOString()}.`
+    );
+  }
+
+  private recordFailure(toolName: IsolatedToolName, error: unknown) {
+    const nextFailures = (this.consecutiveFailures.get(toolName) ?? 0) + 1;
+    const threshold = this.config.isolation.openCircuitAfterFailures;
+    if (nextFailures < threshold) {
+      this.consecutiveFailures.set(toolName, nextFailures);
+      return;
+    }
+
+    const openUntilMs = Date.now() + this.config.isolation.circuitResetMs;
+    this.circuitOpenUntilMs.set(toolName, openUntilMs);
+    this.consecutiveFailures.set(toolName, 0);
+    this.logger.warn(
+      {
+        toolName,
+        threshold,
+        openUntil: new Date(openUntilMs).toISOString(),
+        error: error instanceof Error ? error.message : String(error)
+      },
+      "isolated runtime circuit opened after repeated failures"
+    );
+  }
+
+  private async acquireWorkerSlot() {
+    const maxConcurrentWorkers = this.config.isolation.maxConcurrentWorkers;
+    if (this.inFlightWorkers < maxConcurrentWorkers) {
+      this.inFlightWorkers += 1;
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      this.slotWaiters.push(resolve);
+    });
+    this.inFlightWorkers += 1;
+  }
+
+  private releaseWorkerSlot() {
+    if (this.inFlightWorkers > 0) {
+      this.inFlightWorkers -= 1;
+    }
+    const next = this.slotWaiters.shift();
+    if (next) {
+      next();
+    }
+  }
+
   private async executeWorker(
     request: WorkerRequest,
     commandTimeoutMs: number
   ): Promise<WorkerResponse> {
+    await this.acquireWorkerSlot();
     const launch = resolveWorkerEntrypoint();
     const workerTimeoutMs = Math.max(
       this.config.isolation.workerTimeoutMs,
@@ -269,11 +352,18 @@ export class IsolatedToolRuntime {
     const maxStdioChars = this.config.isolation.maxWorkerOutputChars + 4_096;
 
     return new Promise<WorkerResponse>((resolve, reject) => {
-      const worker = spawn(launch.command, launch.args, {
-        cwd: process.cwd(),
-        env: process.env,
-        stdio: ["pipe", "pipe", "pipe"]
-      });
+      let worker: ChildProcessWithoutNullStreams;
+      try {
+        worker = spawn(launch.command, launch.args, {
+          cwd: process.cwd(),
+          env: process.env,
+          stdio: ["pipe", "pipe", "pipe"]
+        });
+      } catch (error) {
+        this.releaseWorkerSlot();
+        reject(error);
+        return;
+      }
       this.activeWorkers.add(worker);
 
       let stdout = "";
@@ -288,6 +378,7 @@ export class IsolatedToolRuntime {
         settled = true;
         clearTimeout(timeout);
         this.activeWorkers.delete(worker);
+        this.releaseWorkerSlot();
       };
 
       const timeout = setTimeout(() => {

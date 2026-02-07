@@ -98,7 +98,10 @@ You can configure via `config.json` or environment variables.
     "enabled": true,
     "toolNames": ["shell.exec"],
     "workerTimeoutMs": 30000,
-    "maxWorkerOutputChars": 250000
+    "maxWorkerOutputChars": 250000,
+    "maxConcurrentWorkers": 4,
+    "openCircuitAfterFailures": 5,
+    "circuitResetMs": 30000
   },
   "allowShell": false,
   "allowedShellCommands": [],
@@ -134,6 +137,9 @@ You can configure via `config.json` or environment variables.
 - `COREBOT_ISOLATION_TOOLS`
 - `COREBOT_ISOLATION_WORKER_TIMEOUT_MS`
 - `COREBOT_ISOLATION_MAX_WORKER_OUTPUT_CHARS`
+- `COREBOT_ISOLATION_MAX_CONCURRENT_WORKERS`
+- `COREBOT_ISOLATION_OPEN_CIRCUIT_AFTER_FAILURES`
+- `COREBOT_ISOLATION_CIRCUIT_RESET_MS`
 - `COREBOT_ALLOW_SHELL`
 - `COREBOT_SHELL_ALLOWLIST`
 - `COREBOT_ALLOWED_ENV`
@@ -151,6 +157,8 @@ Notes:
 - `COREBOT_WEB_ALLOWLIST` restricts `web.fetch` target hosts (exact host or subdomain match).
 - `COREBOT_WEB_ALLOWED_PORTS` and `COREBOT_WEB_BLOCKED_PORTS` provide port allow/deny controls for `web.fetch`.
 - `COREBOT_ISOLATION_TOOLS` defaults to `shell.exec`; add `web.fetch` and/or `fs.write` to isolate network and file-write execution as well.
+- `COREBOT_ISOLATION_MAX_CONCURRENT_WORKERS` caps simultaneous isolated workers (default `4`).
+- `COREBOT_ISOLATION_OPEN_CIRCUIT_AFTER_FAILURES` and `COREBOT_ISOLATION_CIRCUIT_RESET_MS` control per-tool circuit breaker for repeated worker failures.
 - Default policy denies non-admin `fs.write` to protected paths (`skills/`, `IDENTITY.md`, `TOOLS.md`, `USER.md`, `.mcp.json`).
 - `COREBOT_ADMIN_BOOTSTRAP_SINGLE_USE=true` invalidates bootstrap elevation after first successful use.
 - `COREBOT_ADMIN_BOOTSTRAP_MAX_ATTEMPTS` and `COREBOT_ADMIN_BOOTSTRAP_LOCKOUT_MINUTES` control invalid-key lockout policy.

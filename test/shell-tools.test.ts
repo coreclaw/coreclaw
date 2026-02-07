@@ -152,3 +152,53 @@ test("shell.exec isolated runtime still blocks when shell is disabled", async ()
     fixture.cleanup();
   }
 });
+
+test("shell.exec isolated runtime opens circuit after repeated failures", async () => {
+  const fixture = createStorageFixture({
+    allowShell: true,
+    allowedShellCommands: ["echo", "definitely-missing-command"],
+    isolation: {
+      enabled: true,
+      toolNames: ["shell.exec"],
+      workerTimeoutMs: 30_000,
+      maxWorkerOutputChars: 250_000,
+      openCircuitAfterFailures: 1,
+      circuitResetMs: 60_000
+    }
+  });
+
+  const logger = {
+    fatal: () => undefined,
+    error: () => undefined,
+    warn: () => undefined,
+    info: () => undefined,
+    debug: () => undefined,
+    trace: () => undefined,
+    child: () => logger
+  } as any;
+  const isolatedRuntime = new IsolatedToolRuntime(fixture.config, logger);
+
+  try {
+    const chat = fixture.storage.upsertChat({ channel: "cli", chatId: "local" });
+    const { context } = createToolContext({
+      config: fixture.config,
+      storage: fixture.storage,
+      workspaceDir: fixture.workspaceDir,
+      chatFk: chat.id,
+      isolatedRuntime
+    });
+    const tool = getShellTool();
+
+    await assert.rejects(
+      tool.run({ command: "definitely-missing-command" }, context),
+      /ENOENT|not found|spawn/
+    );
+    await assert.rejects(
+      tool.run({ command: "echo hello" }, context),
+      /circuit open/
+    );
+  } finally {
+    await isolatedRuntime.shutdown();
+    fixture.cleanup();
+  }
+});

@@ -7,10 +7,21 @@ import type { ToolContext } from "../src/tools/registry.js";
 import type { SkillIndexEntry } from "../src/skills/types.js";
 import type { IsolatedToolRuntime } from "../src/isolation/runtime.js";
 
+type TestConfigOverrides = Partial<
+  Omit<Config, "provider" | "scheduler" | "bus" | "observability" | "isolation" | "cli">
+> & {
+  provider?: Partial<Config["provider"]>;
+  scheduler?: Partial<Config["scheduler"]>;
+  bus?: Partial<Config["bus"]>;
+  observability?: Partial<Config["observability"]>;
+  isolation?: Partial<Config["isolation"]>;
+  cli?: Partial<Config["cli"]>;
+};
+
 export const createConfig = (
   workspaceDir: string,
   dataDir: string,
-  overrides: Partial<Config> = {}
+  overrides: TestConfigOverrides = {}
 ): Config => {
   const base: Config = {
     workspaceDir,
@@ -47,7 +58,10 @@ export const createConfig = (
       enabled: true,
       toolNames: ["shell.exec"],
       workerTimeoutMs: 30_000,
-      maxWorkerOutputChars: 250_000
+      maxWorkerOutputChars: 250_000,
+      maxConcurrentWorkers: 4,
+      openCircuitAfterFailures: 5,
+      circuitResetMs: 30_000
     },
     allowShell: false,
     allowedShellCommands: [],
@@ -74,7 +88,7 @@ export const createConfig = (
   };
 };
 
-export const createStorageFixture = (overrides: Partial<Config> = {}) => {
+export const createStorageFixture = (overrides: TestConfigOverrides = {}) => {
   const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), "corebot-test-"));
   const workspaceDir = path.join(rootDir, "workspace");
   const dataDir = path.join(rootDir, "data");

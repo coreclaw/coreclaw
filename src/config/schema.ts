@@ -46,7 +46,10 @@ export const ConfigSchema = z.object({
       enabled: z.boolean().default(true),
       toolNames: z.array(z.string()).default(["shell.exec"]),
       workerTimeoutMs: z.number().int().min(1_000).default(30_000),
-      maxWorkerOutputChars: z.number().int().min(1_000).max(2_000_000).default(250_000)
+      maxWorkerOutputChars: z.number().int().min(1_000).max(2_000_000).default(250_000),
+      maxConcurrentWorkers: z.number().int().min(1).max(64).default(4),
+      openCircuitAfterFailures: z.number().int().min(1).max(50).default(5),
+      circuitResetMs: z.number().int().min(1_000).max(3_600_000).default(30_000)
     })
     .default({}),
   allowShell: z.boolean().default(false),
