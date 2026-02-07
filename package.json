@@ -1,5 +1,5 @@
 {
-  "name": "corebot",
+  "name": "@corebot/core",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -14,6 +14,14 @@
   ],
   "engines": {
     "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/webllm/corebot.git"
   },
   "scripts": {
     "dev": "tsx src/main.ts",
