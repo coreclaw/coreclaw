@@ -1,12 +1,22 @@
 import fs from "node:fs";
 import type { ToolDefinition } from "../types.js";
 import type { McpConfigFile, McpServerConfig } from "./types.js";
+import type { Logger } from "pino";
 
 export type McpToolInfo = {
   server: string;
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+};
+
+export type McpServerHealth = {
+  status: "healthy" | "degraded" | "down";
+  tools: number;
+  calls: number;
+  failures: number;
+  lastCheckedAt: string;
+  lastError?: string;
 };
 
 type McpClientInstance = {
@@ -59,9 +69,15 @@ export class McpManager {
   private clients = new Map<string, McpClientInstance>();
   private tools = new Map<string, McpToolInfo>();
   private factory: McpClientFactory;
+  private serverHealth = new Map<string, McpServerHealth>();
+  private logger?: Pick<Logger, "warn" | "info" | "error" | "debug">;
 
-  constructor(factory: McpClientFactory = defaultClientFactory) {
-    this.factory = factory;
+  constructor(options?: {
+    factory?: McpClientFactory;
+    logger?: Pick<Logger, "warn" | "info" | "error" | "debug">;
+  }) {
+    this.factory = options?.factory ?? defaultClientFactory;
+    this.logger = options?.logger;
   }
 
   async loadFromConfig(configPath: string): Promise<ToolDefinition[]> {
@@ -94,6 +110,11 @@ export class McpManager {
         const tools = Array.isArray(listResult)
           ? listResult
           : (listResult as { tools?: unknown[] })?.tools ?? [];
+        this.setServerHealth(name, {
+          status: "healthy",
+          tools: tools.length,
+          lastError: undefined
+        });
 
         for (const tool of tools as Array<{
           name: string;
@@ -115,7 +136,17 @@ export class McpManager {
           });
         }
       } catch (error) {
-        console.warn(`[MCP] failed to load server '${name}':`, error);
+        const message = error instanceof Error ? error.message : String(error);
+        this.setServerHealth(name, {
+          status: "down",
+          tools: 0,
+          lastError: message
+        });
+        if (this.logger) {
+          this.logger.warn({ server: name, error: message }, "failed to load MCP server");
+        } else {
+          console.warn(`[MCP] failed to load server '${name}':`, error);
+        }
       }
     }
 
@@ -131,7 +162,26 @@ export class McpManager {
     if (!client) {
       throw new Error(`MCP client not connected for ${info.server}`);
     }
-    return client.callTool({ name: info.name, arguments: args });
+    try {
+      const result = await client.callTool({ name: info.name, arguments: args });
+      this.setServerHealth(info.server, {
+        status: "healthy",
+        tools: this.getServerToolCount(info.server),
+        callAttempt: true,
+        callFailed: false
+      });
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.setServerHealth(info.server, {
+        status: "degraded",
+        tools: this.getServerToolCount(info.server),
+        lastError: message,
+        callAttempt: true,
+        callFailed: true
+      });
+      throw error;
+    }
   }
 
   async shutdown() {
@@ -142,5 +192,45 @@ export class McpManager {
     }
     this.clients.clear();
     this.tools.clear();
+  }
+
+  getHealthSnapshot(): Record<string, McpServerHealth> {
+    return Object.fromEntries(
+      [...this.serverHealth.entries()].map(([name, health]) => [name, { ...health }])
+    );
+  }
+
+  private getServerToolCount(server: string): number {
+    let count = 0;
+    for (const info of this.tools.values()) {
+      if (info.server === server) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  private setServerHealth(
+    server: string,
+    patch: {
+      status: McpServerHealth["status"];
+      tools: number;
+      lastError?: string;
+      callAttempt?: boolean;
+      callFailed?: boolean;
+    }
+  ) {
+    const existing = this.serverHealth.get(server);
+    const calls = (existing?.calls ?? 0) + (patch.callAttempt ? 1 : 0);
+    const failures =
+      (existing?.failures ?? 0) + (patch.callFailed ? 1 : 0);
+    this.serverHealth.set(server, {
+      status: patch.status,
+      tools: patch.tools,
+      calls,
+      failures,
+      lastCheckedAt: new Date().toISOString(),
+      ...(patch.lastError ? { lastError: patch.lastError } : {})
+    });
   }
 }

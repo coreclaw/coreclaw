@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { loadConfig } from "./config/load.js";
 import { createLogger } from "./observability/logger.js";
+import { RuntimeTelemetry } from "./observability/telemetry.js";
 import { SqliteStorage } from "./storage/sqlite.js";
 import { MessageBus } from "./bus/bus.js";
 import { ConversationRouter } from "./bus/router.js";
@@ -40,6 +41,7 @@ const main = async () => {
   ensureDir(config.workspaceDir);
 
   const logger = createLogger(config);
+  const telemetry = new RuntimeTelemetry();
 
   const storage = new SqliteStorage(config);
   storage.init();
@@ -47,8 +49,8 @@ const main = async () => {
   const skillLoader = new SkillLoader(config.skillsDir);
   const skills = skillLoader.listSkills();
 
-  const mcpManager = new McpManager();
-  const toolRegistry = new ToolRegistry(new DefaultToolPolicyEngine());
+  const mcpManager = new McpManager({ logger });
+  const toolRegistry = new ToolRegistry(new DefaultToolPolicyEngine(), telemetry);
 
   for (const tool of builtInTools()) {
     toolRegistry.register(tool);
@@ -102,13 +104,35 @@ const main = async () => {
 
   bus.start();
 
-  const scheduler = new Scheduler(storage, bus, logger, config);
+  const scheduler = new Scheduler(storage, bus, logger, config, telemetry);
   scheduler.start();
+
+  const observabilityTimer = config.observability.enabled
+    ? setInterval(() => {
+        const queue = {
+          inbound: storage.countBusMessagesByStatus("inbound"),
+          outbound: storage.countBusMessagesByStatus("outbound")
+        };
+        logger.info(
+          {
+            observability: {
+              queue,
+              ...telemetry.snapshot(),
+              mcp: mcpManager.getHealthSnapshot()
+            }
+          },
+          "runtime observability snapshot"
+        );
+      }, config.observability.reportIntervalMs)
+    : null;
 
   process.on("SIGINT", async () => {
     logger.info("Shutting down...");
     scheduler.stop();
     bus.stop();
+    if (observabilityTimer) {
+      clearInterval(observabilityTimer);
+    }
     await mcpManager.shutdown();
     storage.close();
     process.exit(0);

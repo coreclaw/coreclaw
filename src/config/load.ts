@@ -76,6 +76,14 @@ export const loadConfig = (): Config => {
         ? Number(process.env.COREBOT_BUS_PROCESSING_TIMEOUT_MS)
         : undefined
     },
+    observability: {
+      enabled: process.env.COREBOT_OBS_ENABLED
+        ? process.env.COREBOT_OBS_ENABLED === "true"
+        : undefined,
+      reportIntervalMs: process.env.COREBOT_OBS_REPORT_MS
+        ? Number(process.env.COREBOT_OBS_REPORT_MS)
+        : undefined
+    },
     allowShell: process.env.COREBOT_ALLOW_SHELL
       ? process.env.COREBOT_ALLOW_SHELL === "true"
       : undefined,
@@ -113,6 +121,14 @@ export const loadConfig = (): Config => {
     bus: {
       ...(typeof fileConfig.bus === "object" ? fileConfig.bus : {}),
       ...(typeof envConfig.bus === "object" ? envConfig.bus : {})
+    },
+    observability: {
+      ...(typeof fileConfig.observability === "object"
+        ? fileConfig.observability
+        : {}),
+      ...(typeof envConfig.observability === "object"
+        ? envConfig.observability
+        : {})
     },
     provider: {
       ...(typeof fileConfig.provider === "object" ? fileConfig.provider : {}),

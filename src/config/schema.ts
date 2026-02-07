@@ -35,6 +35,12 @@ export const ConfigSchema = z.object({
       processingTimeoutMs: z.number().int().min(1_000).default(120_000)
     })
     .default({}),
+  observability: z
+    .object({
+      enabled: z.boolean().default(true),
+      reportIntervalMs: z.number().int().min(1_000).default(30_000)
+    })
+    .default({}),
   allowShell: z.boolean().default(false),
   allowedShellCommands: z.array(z.string()).default([]),
   allowedEnv: z.array(z.string()).default([]),

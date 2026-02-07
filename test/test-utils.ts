@@ -38,6 +38,10 @@ export const createConfig = (
       maxRetryBackoffMs: 200,
       processingTimeoutMs: 500
     },
+    observability: {
+      enabled: false,
+      reportIntervalMs: 5_000
+    },
     allowShell: false,
     allowedShellCommands: [],
     allowedEnv: [],
@@ -57,6 +61,7 @@ export const createConfig = (
     provider: { ...base.provider, ...(overrides.provider ?? {}) },
     scheduler: { ...base.scheduler, ...(overrides.scheduler ?? {}) },
     bus: { ...base.bus, ...(overrides.bus ?? {}) },
+    observability: { ...base.observability, ...(overrides.observability ?? {}) },
     cli: { ...base.cli, ...(overrides.cli ?? {}) }
   };
 };

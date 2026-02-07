@@ -5,6 +5,7 @@ import type { Logger } from "pino";
 import { nowIso } from "../util/time.js";
 import { newId } from "../util/ids.js";
 import { computeNextRun } from "./utils.js";
+import type { RuntimeTelemetry } from "../observability/telemetry.js";
 
 export class Scheduler {
   private timer: NodeJS.Timeout | null = null;
@@ -13,7 +14,8 @@ export class Scheduler {
     private storage: SqliteStorage,
     private bus: MessageBus,
     private logger: Logger,
-    private config: Config
+    private config: Config,
+    private telemetry?: RuntimeTelemetry
   ) {}
 
   start() {
@@ -39,11 +41,16 @@ export class Scheduler {
     if (due.length === 0) {
       return;
     }
+    const delaysMs: number[] = [];
     for (const task of due) {
       const chat = this.storage.getChatById(task.chatFk);
       if (!chat) {
         this.logger.warn({ taskId: task.id }, "task chat missing");
         continue;
+      }
+      if (task.nextRunAt) {
+        const delay = Math.max(0, now.getTime() - new Date(task.nextRunAt).getTime());
+        delaysMs.push(delay);
       }
       const nextRunAt = computeNextRun(task, now);
       const status = task.scheduleType === "once" ? "done" : task.status;
@@ -66,6 +73,7 @@ export class Scheduler {
         }
       });
     }
+    this.telemetry?.recordSchedulerDispatch(delaysMs);
     this.logger.info({ count: due.length }, "scheduler tick dispatched");
   }
 }
