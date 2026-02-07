@@ -121,5 +121,14 @@ export const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_inbound_executions_status
         ON inbound_executions(status, updated_at);
     `
+  },
+  {
+    id: 5,
+    sql: `
+      ALTER TABLE task_runs ADD COLUMN inbound_id TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_task_runs_task_inbound
+        ON task_runs(task_fk, inbound_id)
+        WHERE inbound_id IS NOT NULL;
+    `
   }
 ];

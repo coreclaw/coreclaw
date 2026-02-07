@@ -60,6 +60,7 @@ export type TaskRecord = {
 export type TaskRunRecord = {
   id: number;
   taskFk: string;
+  inboundId: string | null;
   runAt: string;
   durationMs: number;
   status: "success" | "error";

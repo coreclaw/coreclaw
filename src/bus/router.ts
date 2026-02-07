@@ -198,6 +198,7 @@ export class ConversationRouter {
     if (message.metadata?.taskId) {
       this.storage.logTaskRun({
         taskFk: String(message.metadata.taskId),
+        inboundId: message.id,
         runAt: nowIso(),
         durationMs: Date.now() - start,
         status: errorMessage ? "error" : "success",

@@ -23,12 +23,31 @@ export class SqliteStorage {
   }
 
   init() {
-    for (const migration of migrations) {
+    const metaExists = this.db
+      .prepare(
+        "SELECT 1 as ok FROM sqlite_master WHERE type = 'table' AND name = 'meta' LIMIT 1"
+      )
+      .get() as { ok: number } | undefined;
+    const currentVersion = metaExists
+      ? Number(
+          (this.db
+            .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
+            .get() as { value?: string } | undefined)?.value ?? "0"
+        ) || 0
+      : 0;
+
+    const pending = migrations
+      .slice()
+      .sort((a, b) => a.id - b.id)
+      .filter((migration) => migration.id > currentVersion);
+    for (const migration of pending) {
       this.db.exec(migration.sql);
     }
+
+    const latest = migrations[migrations.length - 1]?.id ?? 0;
     this.db
       .prepare("INSERT OR REPLACE INTO meta(key, value) VALUES('schema_version', ?)")
-      .run(String(migrations[migrations.length - 1]?.id ?? 0));
+      .run(String(latest));
   }
 
   private getMeta(key: string): string | null {
@@ -899,6 +918,7 @@ export class SqliteStorage {
 
   logTaskRun(params: {
     taskFk: string;
+    inboundId?: string;
     runAt: string;
     durationMs: number;
     status: "success" | "error";
@@ -907,10 +927,11 @@ export class SqliteStorage {
   }) {
     this.db
       .prepare(
-        "INSERT INTO task_runs(task_fk, run_at, duration_ms, status, result_preview, error) VALUES(?,?,?,?,?,?)"
+        "INSERT OR IGNORE INTO task_runs(task_fk, inbound_id, run_at, duration_ms, status, result_preview, error) VALUES(?,?,?,?,?,?,?)"
       )
       .run(
         params.taskFk,
+        params.inboundId ?? null,
         params.runAt,
         params.durationMs,
         params.status,
@@ -927,6 +948,7 @@ export class SqliteStorage {
       .all(taskFk, limit) as Array<{
       id: number;
       task_fk: string;
+      inbound_id: string | null;
       run_at: string;
       duration_ms: number;
       status: "success" | "error";
@@ -936,6 +958,7 @@ export class SqliteStorage {
     return rows.map((row) => ({
       id: row.id,
       taskFk: row.task_fk,
+      inboundId: row.inbound_id,
       runAt: row.run_at,
       durationMs: row.duration_ms,
       status: row.status,

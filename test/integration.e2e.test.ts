@@ -258,6 +258,7 @@ test("E2E: scheduler emits synthetic inbound, router handles it, and task run is
     assert.equal(harness.outbound[0]?.content, "scheduled ok");
     const runs = harness.storage.listTaskRuns(task.id, 10);
     assert.equal(runs.length, 1);
+    assert.ok(runs[0]?.inboundId);
     assert.equal(runs[0]?.status, "success");
     assert.equal(runs[0]?.resultPreview, "scheduled ok");
   } finally {
@@ -381,6 +382,78 @@ test("E2E: inbound execution ledger prevents duplicate runtime on re-queued inbo
         .length,
       1
     );
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("E2E: duplicated scheduled inbound logs task run once", async () => {
+  let providerCalls = 0;
+  const provider = new MockProvider(async () => {
+    providerCalls += 1;
+    return { content: "scheduled duplicate ok" };
+  });
+  const harness = createHarness(provider, {
+    bus: {
+      pollMs: 10,
+      batchSize: 20,
+      maxAttempts: 3,
+      retryBackoffMs: 10,
+      maxRetryBackoffMs: 100,
+      processingTimeoutMs: 200
+    }
+  });
+
+  try {
+    const chat = harness.storage.upsertChat({ channel: "cli", chatId: "local" });
+    harness.storage.setChatRegistered(chat.id, true);
+    const task = harness.storage.createTask({
+      chatFk: chat.id,
+      prompt: "duplicated scheduled task",
+      scheduleType: "interval",
+      scheduleValue: "60000",
+      contextMode: "group",
+      nextRunAt: new Date(Date.now() + 60_000).toISOString()
+    });
+
+    const scheduledInbound = {
+      id: "in-dup-task-1",
+      channel: "cli",
+      chatId: "local",
+      senderId: "scheduler",
+      content: "duplicated scheduled task",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        isScheduledTask: true,
+        taskId: task.id,
+        contextMode: "group",
+        chatFk: chat.id
+      }
+    };
+
+    harness.storage.enqueueBusMessage({
+      direction: "inbound",
+      payload: scheduledInbound,
+      maxAttempts: harness.config.bus.maxAttempts
+    });
+    harness.storage.enqueueBusMessage({
+      direction: "inbound",
+      payload: scheduledInbound,
+      maxAttempts: harness.config.bus.maxAttempts
+    });
+
+    await waitUntil(() => harness.storage.countBusMessagesByStatus("inbound").processed >= 2);
+    await waitUntil(() => harness.outbound.length >= 1);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    assert.equal(providerCalls, 1);
+    assert.equal(harness.outbound.length, 1);
+    assert.equal(harness.outbound[0]?.content, "scheduled duplicate ok");
+
+    const runs = harness.storage.listTaskRuns(task.id, 10);
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0]?.inboundId, scheduledInbound.id);
+    assert.equal(runs[0]?.status, "success");
   } finally {
     await harness.cleanup();
   }
