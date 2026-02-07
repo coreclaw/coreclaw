@@ -16,6 +16,8 @@ import { builtInTools } from "./tools/builtins/index.js";
 import { McpManager } from "./mcp/manager.js";
 import { SkillLoader } from "./skills/loader.js";
 import { CliChannel } from "./channels/cli.js";
+import { WebhookChannel } from "./channels/webhook.js";
+import type { Channel } from "./channels/base.js";
 import { Scheduler } from "./scheduler/scheduler.js";
 import { IsolatedToolRuntime } from "./isolation/runtime.js";
 import type { ToolContext } from "./tools/registry.js";
@@ -92,11 +94,16 @@ const main = async () => {
 
   bus.onInbound(router.handleInbound);
 
-  const channels = [] as Array<CliChannel>;
+  const channels = [] as Channel[];
   if (config.cli.enabled) {
     const cli = new CliChannel();
     channels.push(cli);
     await cli.start(bus, logger);
+  }
+  if (config.webhook.enabled) {
+    const webhook = new WebhookChannel(config);
+    channels.push(webhook);
+    await webhook.start(bus, logger);
   }
 
   bus.onOutbound(async (message) => {
@@ -167,6 +174,11 @@ const main = async () => {
       clearInterval(observabilityTimer);
     }
     await observabilityServer.stop();
+    for (const channel of channels) {
+      if (channel.stop) {
+        await channel.stop();
+      }
+    }
     await isolatedRuntime.shutdown();
     await mcpManager.shutdown();
     storage.close();

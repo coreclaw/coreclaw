@@ -5,4 +5,5 @@ export interface Channel {
   readonly name: string;
   start: (bus: MessageBus, logger: Logger) => Promise<void>;
   send: (payload: { chatId: string; content: string }) => Promise<void>;
+  stop?: () => Promise<void>;
 }
