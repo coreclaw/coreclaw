@@ -13,7 +13,20 @@ import { builtInTools } from "../src/tools/builtins/index.js";
 import { McpManager } from "../src/mcp/manager.js";
 import { Scheduler } from "../src/scheduler/scheduler.js";
 import { RuntimeTelemetry } from "../src/observability/telemetry.js";
+import type { Config } from "../src/config/schema.js";
+import { IsolatedToolRuntime } from "../src/isolation/runtime.js";
 import { createStorageFixture } from "./test-utils.js";
+
+type HarnessOverrides = Partial<
+  Omit<Config, "provider" | "scheduler" | "bus" | "observability" | "isolation" | "cli">
+> & {
+  provider?: Partial<Config["provider"]>;
+  scheduler?: Partial<Config["scheduler"]>;
+  bus?: Partial<Config["bus"]>;
+  observability?: Partial<Config["observability"]>;
+  isolation?: Partial<Config["isolation"]>;
+  cli?: Partial<Config["cli"]>;
+};
 
 const waitUntil = async (
   predicate: () => boolean,
@@ -61,22 +74,32 @@ const createNoopLogger = () =>
     child: () => createNoopLogger()
   }) as any;
 
-const createHarness = (provider: LlmProvider) => {
+const createHarness = (provider: LlmProvider, overrides: HarnessOverrides = {}) => {
+  const schedulerDefaults = { tickMs: 20 };
+  const busDefaults = {
+    pollMs: 10,
+    batchSize: 20,
+    maxAttempts: 3,
+    retryBackoffMs: 10,
+    maxRetryBackoffMs: 100,
+    processingTimeoutMs: 200
+  };
   const fixture = createStorageFixture({
-    scheduler: { tickMs: 20 },
+    ...overrides,
+    scheduler: {
+      ...schedulerDefaults,
+      ...(overrides.scheduler ?? {})
+    },
     bus: {
-      pollMs: 10,
-      batchSize: 20,
-      maxAttempts: 3,
-      retryBackoffMs: 10,
-      maxRetryBackoffMs: 100,
-      processingTimeoutMs: 200
+      ...busDefaults,
+      ...(overrides.bus ?? {})
     }
   });
 
   const logger = createNoopLogger();
   const telemetry = new RuntimeTelemetry();
   const mcp = new McpManager({ logger });
+  const isolatedRuntime = new IsolatedToolRuntime(fixture.config, logger);
   const registry = new ToolRegistry(new DefaultToolPolicyEngine(), telemetry);
   for (const tool of builtInTools()) {
     registry.register(tool);
@@ -98,7 +121,7 @@ const createHarness = (provider: LlmProvider) => {
     logger,
     fixture.config,
     [],
-    undefined
+    isolatedRuntime
   );
   bus.onInbound(router.handleInbound);
 
@@ -115,6 +138,7 @@ const createHarness = (provider: LlmProvider) => {
 
   const cleanup = async () => {
     bus.stop();
+    await isolatedRuntime.shutdown();
     await mcp.shutdown();
     fixture.cleanup();
   };
@@ -238,6 +262,58 @@ test("E2E: scheduler emits synthetic inbound, router handles it, and task run is
     assert.equal(runs[0]?.resultPreview, "scheduled ok");
   } finally {
     scheduler.stop();
+    await harness.cleanup();
+  }
+});
+
+test("E2E: isolated fs.write executes through runtime tool loop", async () => {
+  const provider = new MockProvider(async (req) => {
+    const hasToolResult = req.messages.some((message) => message.role === "tool");
+    if (!hasToolResult) {
+      return {
+        toolCalls: [
+          {
+            id: "call-iso-fs",
+            name: "fs.write",
+            args: {
+              path: "isolated/e2e.txt",
+              content: "isolation works"
+            }
+          }
+        ]
+      };
+    }
+    return { content: "isolated write complete" };
+  });
+
+  const harness = createHarness(provider, {
+    isolation: {
+      enabled: true,
+      toolNames: ["fs.write"],
+      workerTimeoutMs: 30_000,
+      maxWorkerOutputChars: 250_000,
+      maxConcurrentWorkers: 2,
+      openCircuitAfterFailures: 5,
+      circuitResetMs: 30_000
+    }
+  });
+
+  try {
+    harness.bus.publishInbound({
+      id: "in-iso-1",
+      channel: "cli",
+      chatId: "local",
+      senderId: "user",
+      content: "write file in isolation",
+      createdAt: new Date().toISOString()
+    });
+
+    await waitUntil(() => harness.outbound.length >= 1);
+    assert.equal(harness.outbound[0]?.content, "isolated write complete");
+
+    const targetPath = path.join(harness.workspaceDir, "isolated/e2e.txt");
+    assert.equal(fs.readFileSync(targetPath, "utf-8"), "isolation works");
+  } finally {
     await harness.cleanup();
   }
 });
