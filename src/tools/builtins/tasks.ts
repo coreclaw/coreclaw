@@ -4,7 +4,7 @@ import { computeNextRun } from "../../scheduler/utils.js";
 import { nowIso } from "../../util/time.js";
 
 export const taskTools = (): ToolSpec<any>[] => {
-  const scheduleTool: ToolSpec<z.ZodTypeAny> = {
+  const scheduleTool: ToolSpec<any> = {
     name: "tasks.schedule",
     description: "Schedule a task (cron/interval/once).",
     schema: z.object({
@@ -38,7 +38,7 @@ export const taskTools = (): ToolSpec<any>[] => {
     }
   };
 
-  const listTool: ToolSpec<z.ZodTypeAny> = {
+  const listTool: ToolSpec<any> = {
     name: "tasks.list",
     description: "List scheduled tasks for this chat.",
     schema: z.object({
@@ -50,7 +50,7 @@ export const taskTools = (): ToolSpec<any>[] => {
     }
   };
 
-  const updateTool: ToolSpec<z.ZodTypeAny> = {
+  const updateTool: ToolSpec<any> = {
     name: "tasks.update",
     description: "Update a task's status or schedule.",
     schema: z.object({

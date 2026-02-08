@@ -5,7 +5,7 @@ import { resolveWorkspacePath } from "../../util/file.js";
 import type { ToolSpec } from "../registry.js";
 
 export const fsTools = (): ToolSpec<any>[] => {
-  const readTool: ToolSpec<z.ZodTypeAny> = {
+  const readTool: ToolSpec<any> = {
     name: "fs.read",
     description: "Read a text file within the workspace.",
     schema: z.object({
@@ -17,7 +17,7 @@ export const fsTools = (): ToolSpec<any>[] => {
     }
   };
 
-  const writeTool: ToolSpec<z.ZodTypeAny> = {
+  const writeTool: ToolSpec<any> = {
     name: "fs.write",
     description: "Write a text file within the workspace (isolated runtime optional).",
     schema: z.object({
@@ -47,7 +47,7 @@ export const fsTools = (): ToolSpec<any>[] => {
     }
   };
 
-  const listTool: ToolSpec<z.ZodTypeAny> = {
+  const listTool: ToolSpec<any> = {
     name: "fs.list",
     description: "List files in a workspace directory.",
     schema: z.object({

@@ -15,13 +15,13 @@ const getAllowedEnv = (key: string, allowed: string[]) => {
 };
 
 export const webTools = (): ToolSpec<any>[] => {
-  const fetchTool: ToolSpec<z.ZodTypeAny> = {
+  const fetchTool: ToolSpec<any> = {
     name: "web.fetch",
     description: "Fetch a URL over HTTP.",
     schema: z.object({
       url: z.string().url(),
       method: z.enum(["GET", "POST"]).default("GET"),
-      headers: z.record(z.string()).optional(),
+      headers: z.record(z.string(), z.string()).optional(),
       body: z.string().optional(),
       timeoutMs: z.number().int().min(1_000).max(120_000).default(DEFAULT_WEB_FETCH_TIMEOUT_MS),
       maxResponseChars: z
@@ -82,7 +82,7 @@ export const webTools = (): ToolSpec<any>[] => {
     }
   };
 
-  const searchTool: ToolSpec<z.ZodTypeAny> = {
+  const searchTool: ToolSpec<any> = {
     name: "web.search",
     description: "Search the web using Brave Search API.",
     schema: z.object({

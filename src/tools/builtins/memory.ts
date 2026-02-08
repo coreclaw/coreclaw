@@ -11,7 +11,7 @@ const getChatMemoryPath = (workspaceDir: string, channel: string, chatId: string
   resolveWorkspacePath(workspaceDir, `memory/${channel}_${chatId}.md`);
 
 export const memoryTools = (): ToolSpec<any>[] => {
-  const readTool: ToolSpec<z.ZodTypeAny> = {
+  const readTool: ToolSpec<any> = {
     name: "memory.read",
     description: "Read memory (global or chat-specific).",
     schema: z.object({
@@ -46,7 +46,7 @@ export const memoryTools = (): ToolSpec<any>[] => {
     }
   };
 
-  const writeTool: ToolSpec<z.ZodTypeAny> = {
+  const writeTool: ToolSpec<any> = {
     name: "memory.write",
     description: "Write memory (global or chat-specific).",
     schema: z.object({

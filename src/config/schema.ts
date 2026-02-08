@@ -13,7 +13,7 @@ export const ConfigSchema = z.object({
       model: z.string().default("gpt-4o-mini"),
       temperature: z.number().default(0.2)
     })
-    .default({}),
+    .prefault({}),
   historyMaxMessages: z.number().default(30),
   storeFullMessages: z.boolean().default(false),
   maxToolIterations: z.number().default(8),
@@ -24,7 +24,7 @@ export const ConfigSchema = z.object({
     .object({
       tickMs: z.number().default(60_000)
     })
-    .default({}),
+    .prefault({}),
   bus: z
     .object({
       pollMs: z.number().int().min(10).default(1_000),
@@ -40,7 +40,7 @@ export const ConfigSchema = z.object({
       perChatRateLimitWindowMs: z.number().int().min(1_000).default(60_000),
       perChatRateLimitMax: z.number().int().min(1).default(120)
     })
-    .default({}),
+    .prefault({}),
   observability: z
     .object({
       enabled: z.boolean().default(true),
@@ -51,9 +51,9 @@ export const ConfigSchema = z.object({
           host: z.string().default("127.0.0.1"),
           port: z.number().int().min(1).max(65535).default(3210)
         })
-        .default({})
+        .prefault({})
     })
-    .default({}),
+    .prefault({}),
   slo: z
     .object({
       enabled: z.boolean().default(true),
@@ -65,7 +65,7 @@ export const ConfigSchema = z.object({
       maxMcpFailureRate: z.number().min(0).max(1).default(0.3),
       alertWebhookUrl: z.string().url().optional()
     })
-    .default({}),
+    .prefault({}),
   isolation: z
     .object({
       enabled: z.boolean().default(true),
@@ -76,7 +76,7 @@ export const ConfigSchema = z.object({
       openCircuitAfterFailures: z.number().int().min(1).max(50).default(5),
       circuitResetMs: z.number().int().min(1_000).max(3_600_000).default(30_000)
     })
-    .default({}),
+    .prefault({}),
   allowShell: z.boolean().default(false),
   allowedShellCommands: z.array(z.string()).default([]),
   allowedEnv: z.array(z.string()).default([]),
@@ -98,12 +98,12 @@ export const ConfigSchema = z.object({
       authToken: z.string().optional(),
       maxBodyBytes: z.number().int().min(1_024).max(10_000_000).default(1_000_000)
     })
-    .default({}),
+    .prefault({}),
   cli: z
     .object({
       enabled: z.boolean().default(true)
     })
-    .default({})
+    .prefault({})
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

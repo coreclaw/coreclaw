@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import type { ToolDefinition } from "../types.js";
 import type { SqliteStorage } from "../storage/sqlite.js";
 import type { McpManager } from "../mcp/manager.js";
@@ -48,7 +47,7 @@ export type ToolContext = {
   isolatedRuntime?: IsolatedToolRuntime;
 };
 
-export interface ToolSpec<TArgs extends z.ZodTypeAny> {
+export interface ToolSpec<TArgs extends z.ZodType = z.ZodType> {
   name: string;
   description: string;
   schema: TArgs;
@@ -56,7 +55,7 @@ export interface ToolSpec<TArgs extends z.ZodTypeAny> {
 }
 
 export class ToolRegistry {
-  private tools = new Map<string, ToolSpec<z.ZodTypeAny>>();
+  private tools = new Map<string, ToolSpec<any>>();
   private toolDefs: ToolDefinition[] = [];
 
   constructor(
@@ -64,11 +63,9 @@ export class ToolRegistry {
     private telemetry?: RuntimeTelemetry
   ) {}
 
-  register<TArgs extends z.ZodTypeAny>(tool: ToolSpec<TArgs>) {
-    this.tools.set(tool.name, tool as unknown as ToolSpec<z.ZodTypeAny>);
-    const jsonSchema = zodToJsonSchema(tool.schema, {
-      name: tool.name
-    }) as Record<string, unknown>;
+  register<TArgs extends z.ZodType>(tool: ToolSpec<TArgs>) {
+    this.tools.set(tool.name, tool as unknown as ToolSpec<any>);
+    const jsonSchema = z.toJSONSchema(tool.schema) as Record<string, unknown>;
     this.toolDefs.push({
       name: tool.name,
       description: tool.description,
@@ -78,7 +75,7 @@ export class ToolRegistry {
 
   registerRaw(def: ToolDefinition, handler: (args: unknown, ctx: ToolContext) => Promise<string>) {
     const schema = z.any();
-    const spec: ToolSpec<z.ZodTypeAny> = {
+    const spec: ToolSpec<any> = {
       name: def.name,
       description: def.description,
       schema,

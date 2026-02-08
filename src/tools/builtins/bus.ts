@@ -11,7 +11,7 @@ const parsePayload = (payload: string): unknown => {
 };
 
 export const busTools = (): ToolSpec<any>[] => {
-  const listDeadLetterTool: ToolSpec<z.ZodTypeAny> = {
+  const listDeadLetterTool: ToolSpec<any> = {
     name: "bus.dead_letter.list",
     description: "List dead-letter queue records.",
     schema: z.object({
@@ -37,7 +37,7 @@ export const busTools = (): ToolSpec<any>[] => {
     }
   };
 
-  const replayDeadLetterTool: ToolSpec<z.ZodTypeAny> = {
+  const replayDeadLetterTool: ToolSpec<any> = {
     name: "bus.dead_letter.replay",
     description: "Replay dead-letter queue records back to pending.",
     schema: z.object({

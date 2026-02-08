@@ -141,7 +141,7 @@ const runDirectCommand = async (params: {
   });
 
 export const shellTools = (): ToolSpec<any>[] => {
-  const shellExec: ToolSpec<z.ZodTypeAny> = {
+  const shellExec: ToolSpec<any> = {
     name: "shell.exec",
     description:
       "Execute a shell command within the workspace using isolated runtime when enabled.",

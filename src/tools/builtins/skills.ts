@@ -17,7 +17,7 @@ const updateEnabledSkills = (
 };
 
 export const skillTools = (): ToolSpec<any>[] => {
-  const listTool: ToolSpec<z.ZodTypeAny> = {
+  const listTool: ToolSpec<any> = {
     name: "skills.list",
     description: "List available skills.",
     schema: z.object({}),
@@ -34,7 +34,7 @@ export const skillTools = (): ToolSpec<any>[] => {
     }
   };
 
-  const readTool: ToolSpec<z.ZodTypeAny> = {
+  const readTool: ToolSpec<any> = {
     name: "skills.read",
     description: "Read a skill file.",
     schema: z.object({
@@ -49,7 +49,7 @@ export const skillTools = (): ToolSpec<any>[] => {
     }
   };
 
-  const enableTool: ToolSpec<z.ZodTypeAny> = {
+  const enableTool: ToolSpec<any> = {
     name: "skills.enable",
     description: "Enable a skill for this chat.",
     schema: z.object({
@@ -74,7 +74,7 @@ export const skillTools = (): ToolSpec<any>[] => {
     }
   };
 
-  const disableTool: ToolSpec<z.ZodTypeAny> = {
+  const disableTool: ToolSpec<any> = {
     name: "skills.disable",
     description: "Disable a skill for this chat.",
     schema: z.object({
@@ -99,7 +99,7 @@ export const skillTools = (): ToolSpec<any>[] => {
     }
   };
 
-  const enabledTool: ToolSpec<z.ZodTypeAny> = {
+  const enabledTool: ToolSpec<any> = {
     name: "skills.enabled",
     description: "List currently enabled skill names for this chat.",
     schema: z.object({}),

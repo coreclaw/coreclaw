@@ -4,7 +4,7 @@ import { nowIso } from "../../util/time.js";
 import { newId } from "../../util/ids.js";
 
 export const messageTools = (): ToolSpec<any>[] => {
-  const sendTool: ToolSpec<z.ZodTypeAny> = {
+  const sendTool: ToolSpec<any> = {
     name: "message.send",
     description: "Send a message to a channel chat.",
     schema: z.object({
@@ -32,7 +32,7 @@ export const messageTools = (): ToolSpec<any>[] => {
     }
   };
 
-  const registerChat: ToolSpec<z.ZodTypeAny> = {
+  const registerChat: ToolSpec<any> = {
     name: "chat.register",
     description: "Register a chat for full message storage.",
     schema: z.object({
@@ -120,7 +120,7 @@ export const messageTools = (): ToolSpec<any>[] => {
     }
   };
 
-  const setRole: ToolSpec<z.ZodTypeAny> = {
+  const setRole: ToolSpec<any> = {
     name: "chat.set_role",
     description: "Set chat role (admin/normal).",
     schema: z.object({
