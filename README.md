@@ -427,7 +427,8 @@ Corebot is inspired by NanoClaw + NanoBot patterns.
 
 ---
 
-For the full architecture details, see `ARCHITECTURE.md`.
+For the full architecture details, see ['ARCHITECTURE.md'](./ARCHITECTURE.md). 
+For the runbook, see ['RUNBOOK.md'](./RUNBOOK.md).
 
 ## License
 
