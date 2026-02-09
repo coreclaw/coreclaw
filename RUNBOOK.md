@@ -67,3 +67,110 @@
 3. Use `COREBOT_WEBHOOK_AUTH_TOKEN` and send token via:
    - `Authorization: Bearer <token>`, or
    - `x-corebot-token`.
+
+## 8) Circuit Breaker Recovery (Isolated Runtime)
+
+When a high-risk tool (e.g., `shell.exec`) fails consecutively, the circuit breaker opens:
+
+1. **Symptom**: tool calls return `Isolated runtime circuit open for <tool> until <time>`.
+2. **Automatic recovery**: the circuit resets after `COREBOT_ISOLATION_CIRCUIT_RESET_MS` (default 30s).
+3. **Manual recovery**: restart the process to immediately reset all circuits.
+4. **Root cause investigation**:
+   - Check logs for `isolated runtime circuit opened after repeated failures`.
+   - Look at the `error` field for the underlying failure reason.
+   - Common causes: workspace path issues, command not found, network errors, worker crashes.
+5. **Tuning**:
+   - Increase `COREBOT_ISOLATION_OPEN_CIRCUIT_AFTER_FAILURES` if transient failures are expected.
+   - Increase `COREBOT_ISOLATION_CIRCUIT_RESET_MS` if you want longer cooldown periods.
+   - Increase `COREBOT_ISOLATION_MAX_CONCURRENT_WORKERS` if workers are queuing up.
+
+## 9) Common Troubleshooting
+
+### Bot not responding
+1. Check `/health/ready` — if not `200`, the bus or scheduler may be stopped.
+2. Check logs for `runtime error` or `Provider error`.
+3. Verify `OPENAI_API_KEY` is set and valid.
+4. Check queue: `GET /status` shows queue depth. If inbound queue is growing, the processor may be stuck.
+
+### Messages going to dead-letter queue
+1. List dead-letter entries: `/dlq list` in CLI, or use the `bus.dead_letter.list` tool (admin only). `GET /status` only shows queue counts.
+2. Check `lastError` field for the failure reason.
+3. Common causes: LLM provider errors (rate limits, auth), tool execution failures.
+4. After fixing root cause, replay: `/dlq replay inbound`.
+
+### High memory usage
+1. Check message count in SQLite — compaction should be pruning old messages.
+2. If `storeFullMessages=true`, consider switching to `false` (only registered chats store full history).
+3. Tune `historyMaxMessages` lower to trigger compaction sooner.
+
+### MCP tools not appearing
+1. Check `.mcp.json` exists and is valid JSON.
+2. Verify the MCP server command works independently.
+3. Check `allowedMcpServers` and `allowedMcpTools` include the expected entries.
+4. Check logs for `failed to sync MCP tools`.
+5. Force reload: use `mcp.reload` tool (admin only).
+
+### Scheduled task not firing
+1. Check `tasks.list` — verify `status=active` and `nextRunAt` is in the past.
+2. Scheduler ticks every `scheduler.tickMs` (default 60s), so tasks may have up to 60s delay.
+3. Check logs for `scheduler` entries.
+4. Verify the task's `scheduleValue` is a valid cron expression / interval / ISO datetime.
+
+### Admin bootstrap not working
+1. Verify `COREBOT_ADMIN_BOOTSTRAP_KEY` is set.
+2. Check if bootstrap is already used (`adminBootstrapSingleUse=true`).
+3. Check if locked out due to failed attempts (check logs for lockout messages).
+4. If locked, wait for `adminBootstrapLockoutMinutes` to expire. Restarting alone does not clear lockout state because it is persisted in SQLite meta.
+
+## 10) Performance Tuning
+
+### Queue Throughput
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `bus.pollMs` | 1000 | Lower = faster processing, higher CPU |
+| `bus.batchSize` | 50 | Messages processed per poll cycle |
+| `bus.maxAttempts` | 5 | Retries before dead-letter |
+| `bus.retryBackoffMs` | 1000 | Base retry delay (exponential: delay × 2^attempt) |
+| `bus.maxRetryBackoffMs` | 60000 | Cap on retry delay |
+| `bus.processingTimeoutMs` | 120000 | Stale processing threshold |
+
+### Context Window
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `historyMaxMessages` | 30 | Messages included in LLM context |
+| `maxToolIterations` | 8 | Max tool-calling loop iterations |
+| `maxToolOutputChars` | 50000 | Truncation limit per tool output |
+
+### Isolation Workers
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `isolation.maxConcurrentWorkers` | 4 | Parallel isolated tool executions |
+| `isolation.workerTimeoutMs` | 30000 | Per-worker timeout |
+| `isolation.maxWorkerOutputChars` | 250000 | Worker stdout cap |
+
+### Rate Limiting
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `bus.perChatRateLimitWindowMs` | 60000 | Sliding window duration |
+| `bus.perChatRateLimitMax` | 120 | Max messages per chat per window |
+| `bus.overloadPendingThreshold` | 2000 | Queue depth that triggers backoff |
+| `bus.overloadBackoffMs` | 500 | Delay added when overloaded |
+
+## 11) Log Interpretation
+
+Corebot uses Pino structured JSON logs. Key log messages:
+
+| Log Message | Level | Meaning |
+|-------------|-------|---------|
+| `runtime observability snapshot` | info | Periodic metrics report |
+| `MCP tools synchronized` | info | MCP config reloaded successfully |
+| `bus message dropped by flow control` | warn | Queue overflow or rate limit hit |
+| `bus message dead-lettered` | error | Message exceeded max retry attempts |
+| `bus message scheduled for retry` | warn | Transient failure, will retry |
+| `recovered stale processing bus messages` | warn | Stale processing messages requeued on startup |
+| `isolated runtime circuit opened after repeated failures` | warn | Circuit breaker tripped |
+| `isolated runtime circuit closed after cooldown` | info | Circuit breaker recovered |
+| `runtime error` | error | LLM provider or agent error |
+| `tool error` | error | Tool execution failure |
+| `failed to sync MCP tools` | warn | MCP config or server issue |
+| `SLO breach: ...` | warn | A threshold was exceeded |

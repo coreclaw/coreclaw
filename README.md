@@ -131,6 +131,12 @@ You can configure via `config.json` or environment variables.
   "mcpConfigPath": ".mcp.json",
   "scheduler": { "tickMs": 60000 },
   "bus": {
+    "pollMs": 1000,
+    "batchSize": 50,
+    "maxAttempts": 5,
+    "retryBackoffMs": 1000,
+    "maxRetryBackoffMs": 60000,
+    "processingTimeoutMs": 120000,
     "maxPendingInbound": 5000,
     "maxPendingOutbound": 5000,
     "overloadPendingThreshold": 2000,
@@ -214,12 +220,20 @@ You can configure via `config.json` or environment variables.
 - `COREBOT_WEB_ALLOWLIST`
 - `COREBOT_WEB_ALLOWED_PORTS`
 - `COREBOT_WEB_BLOCKED_PORTS`
+- `COREBOT_BUS_POLL_MS`
+- `COREBOT_BUS_BATCH_SIZE`
+- `COREBOT_BUS_MAX_ATTEMPTS`
+- `COREBOT_BUS_RETRY_BACKOFF_MS`
+- `COREBOT_BUS_MAX_RETRY_BACKOFF_MS`
+- `COREBOT_BUS_PROCESSING_TIMEOUT_MS`
 - `COREBOT_BUS_MAX_PENDING_INBOUND`
 - `COREBOT_BUS_MAX_PENDING_OUTBOUND`
 - `COREBOT_BUS_OVERLOAD_PENDING_THRESHOLD`
 - `COREBOT_BUS_OVERLOAD_BACKOFF_MS`
 - `COREBOT_BUS_CHAT_RATE_WINDOW_MS`
 - `COREBOT_BUS_CHAT_RATE_MAX`
+- `COREBOT_OBS_ENABLED`
+- `COREBOT_OBS_REPORT_MS`
 - `COREBOT_OBS_HTTP_ENABLED`
 - `COREBOT_OBS_HTTP_HOST`
 - `COREBOT_OBS_HTTP_PORT`
@@ -245,7 +259,7 @@ You can configure via `config.json` or environment variables.
 - `COREBOT_WEBHOOK_MAX_BODY_BYTES`
 
 Notes:
-- `COREBOT_ALLOWED_ENV` is default-deny. Include keys explicitly (for example `BRAVE_API_KEY`) for tools that need env access.
+- `COREBOT_ALLOWED_ENV` is used by tools that explicitly gate env access (for example `web.search`) and by isolated `shell.exec` workers.
 - `COREBOT_SHELL_ALLOWLIST` matches executable names (for example `ls,git`), not full command prefixes.
 - `COREBOT_WEB_ALLOWLIST` restricts `web.fetch` target hosts (exact host or subdomain match).
 - `COREBOT_WEB_ALLOWED_PORTS` and `COREBOT_WEB_BLOCKED_PORTS` provide port allow/deny controls for `web.fetch`.
@@ -253,7 +267,7 @@ Notes:
 - `COREBOT_ISOLATION_MAX_CONCURRENT_WORKERS` caps simultaneous isolated workers (default `4`).
 - `COREBOT_ISOLATION_OPEN_CIRCUIT_AFTER_FAILURES` and `COREBOT_ISOLATION_CIRCUIT_RESET_MS` control per-tool circuit breaker for repeated worker failures.
 - Default policy denies non-admin `fs.write` to protected paths (`skills/`, `IDENTITY.md`, `TOOLS.md`, `USER.md`, `.mcp.json`).
-- `COREBOT_MCP_ALLOWED_SERVERS` and `COREBOT_MCP_ALLOWED_TOOLS` enforce explicit MCP allowlists (supports `*` wildcard in tool patterns).
+- `COREBOT_MCP_ALLOWED_SERVERS` and `COREBOT_MCP_ALLOWED_TOOLS` act as allowlists when set; empty lists allow all discovered MCP servers/tools.
 - `COREBOT_WEBHOOK_AUTH_TOKEN` can be sent via `Authorization: Bearer <token>` or `x-corebot-token`.
 - `COREBOT_ADMIN_BOOTSTRAP_SINGLE_USE=true` invalidates bootstrap elevation after first successful use.
 - `COREBOT_ADMIN_BOOTSTRAP_MAX_ATTEMPTS` and `COREBOT_ADMIN_BOOTSTRAP_LOCKOUT_MINUTES` control invalid-key lockout policy.
@@ -266,10 +280,11 @@ pnpm install --frozen-lockfile
 pnpm run build
 ```
 
-2) **Run**  
+2) **Run**
 ```bash
 export OPENAI_API_KEY=YOUR_KEY
-node dist/main.js
+node dist/bin.js
+# Or directly: node dist/main.js
 ```
 
 3) **Persist data**  
@@ -338,6 +353,146 @@ jobs:
 - `skills.list`, `skills.read`, `skills.enable`, `skills.disable`, `skills.enabled`
 - `mcp.reload` (admin only; force refresh MCP config and tool bindings)
 - `bus.dead_letter.list`, `bus.dead_letter.replay` (admin only)
+
+### Tool API Reference
+
+#### File System
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `fs.read` | `path: string` | Read a text file within the workspace |
+| `fs.write` | `path: string`, `content: string`, `mode?: "overwrite"\|"append"` (default `"overwrite"`) | Write a text file within the workspace |
+| `fs.list` | `path?: string` (default `"."`) | List files in a workspace directory |
+
+#### Shell
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `shell.exec` | `command: string`, `cwd?: string`, `timeoutMs?: number` (default 20000, max 120000) | Execute a command. Disabled by default; requires `allowShell=true`. Admin only. |
+
+Commands are tokenized and executed directly (no shell interpreter). If `allowedShellCommands` is non-empty, only listed executable names are permitted.
+
+#### Web
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `web.fetch` | `url: string`, `method?: "GET"\|"POST"` (default `"GET"`), `headers?: Record<string,string>`, `body?: string`, `timeoutMs?: number` (default 15000), `maxResponseChars?: number` (default 200000) | Fetch a URL over HTTP |
+| `web.search` | `query: string`, `count?: number` (default 5, max 10) | Search the web using Brave Search API. Requires `BRAVE_API_KEY` in `allowedEnv`. |
+
+#### Memory
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `memory.read` | `scope?: "global"\|"chat"\|"all"` (default `"all"`) | Read memory content |
+| `memory.write` | `scope?: "global"\|"chat"` (default `"chat"`), `content: string`, `mode?: "append"\|"replace"` (default `"append"`) | Write memory. Global scope is admin only. |
+
+Memory files: `workspace/memory/MEMORY.md` (global), `workspace/memory/{channel}_{chatId}.md` (per-chat).
+
+#### Messaging
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `message.send` | `content: string`, `channel?: string`, `chatId?: string` | Send a message. Cross-chat sending is admin only. |
+| `chat.register` | `channel?: string`, `chatId?: string`, `role?: "admin"\|"normal"`, `bootstrapKey?: string` | Register a chat for full message storage. See Admin Bootstrap below. |
+| `chat.set_role` | `channel: string`, `chatId: string`, `role: "admin"\|"normal"` | Set chat role. Admin only. |
+
+#### Tasks
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `tasks.schedule` | `prompt: string`, `scheduleType: "cron"\|"interval"\|"once"`, `scheduleValue: string`, `contextMode?: "group"\|"isolated"` (default `"group"`) | Create a scheduled task |
+| `tasks.list` | `includeInactive?: boolean` (default `true`) | List tasks for this chat |
+| `tasks.update` | `taskId: string`, `status?: "active"\|"paused"\|"done"`, `scheduleType?`, `scheduleValue?`, `contextMode?` | Update a task. Cross-chat updates are admin only. |
+
+`scheduleValue` format: cron expression for `cron`, milliseconds string for `interval`, ISO datetime for `once`.
+
+#### Skills Management
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `skills.list` | *(none)* | List available skills with enabled status |
+| `skills.read` | `name: string` | Read a skill file content |
+| `skills.enable` | `name: string` | Enable a skill for this chat |
+| `skills.disable` | `name: string` | Disable a skill (always-skills cannot be disabled) |
+| `skills.enabled` | *(none)* | List currently enabled skill names |
+
+#### Admin Tools
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `mcp.reload` | `reason?: string` | Force reload MCP config and re-register tools. Admin only. |
+| `bus.dead_letter.list` | `direction?: "inbound"\|"outbound"`, `limit?: number` (default 20) | List dead-letter queue entries. Admin only. |
+| `bus.dead_letter.replay` | `queueId?: string`, `direction?: "inbound"\|"outbound"`, `limit?: number` (default 10) | Replay dead-letter entries back to pending. Admin only. |
+
+## Security Model
+
+### Roles
+
+Corebot uses two roles: **admin** and **normal**. New chats default to `normal`.
+
+### Admin Bootstrap
+
+The first admin is created through a bootstrap flow:
+
+1. Set `COREBOT_ADMIN_BOOTSTRAP_KEY` in config/env.
+2. A user calls `chat.register` with `role=admin` and `bootstrapKey=<the key>`.
+3. If the key matches, the chat is promoted to admin.
+4. With `adminBootstrapSingleUse=true` (default), the key is invalidated after first use.
+5. After `adminBootstrapMaxAttempts` (default 5) failed attempts, bootstrap locks for `adminBootstrapLockoutMinutes` (default 15).
+6. Once an admin exists, new admins can only be granted by existing admins via `chat.set_role`.
+
+### Permission Matrix
+
+| Capability | Normal | Admin |
+|-----------|--------|-------|
+| File read/write/list (within workspace) | Yes | Yes |
+| File write to protected paths | No | Yes |
+| Shell execution | No | Yes |
+| Web fetch (policy-restricted) | Yes | Yes |
+| Memory write (chat scope) | Yes | Yes |
+| Memory write (global scope) | No | Yes |
+| Send message (same chat) | Yes | Yes |
+| Send message (cross-chat) | No | Yes |
+| Register own chat | Yes | Yes |
+| Register other chats | No | Yes |
+| Update own tasks | Yes | Yes |
+| Update other chats' tasks | No | Yes |
+| MCP tool execution | No | Yes |
+| MCP reload | No | Yes |
+| Dead-letter queue operations | No | Yes |
+| Set chat roles | No | Yes |
+
+### Protected Workspace Paths
+
+Non-admin `fs.write` is denied for: `IDENTITY.md`, `TOOLS.md`, `USER.md`, `.mcp.json`, `skills/` (and any path under it).
+
+## Memory
+
+Corebot maintains two types of persistent memory:
+
+- **Global memory** (`workspace/memory/MEMORY.md`): shared across all chats. Admin-only for writes.
+- **Per-chat memory** (`workspace/memory/{channel}_{chatId}.md`): scoped to a specific chat session.
+
+Both are automatically included in the system prompt when available, except isolated scheduled-task runs (chat memory excluded).
+
+## Conversation Compaction
+
+When the stored message count for a chat exceeds `historyMaxMessages * 2`, Corebot automatically compacts:
+
+1. Recent messages are sent to the LLM to generate a bullet summary (max 150 words).
+2. Old messages beyond `historyMaxMessages` are pruned from storage.
+3. The summary is stored in `conversation_state` and included in future system prompts.
+
+This keeps context manageable while preserving key facts and decisions.
+
+## Inbound Execution Ledger
+
+To ensure idempotency when messages are re-queued (e.g., after a retry), Corebot maintains an `inbound_executions` table:
+
+- Before processing, the router checks if the inbound message was already processed.
+- If completed, the cached response is reused without re-running the LLM or tools.
+- If a previous run is stale (older than `bus.processingTimeoutMs`), it is reclaimed.
+- Outbound message IDs are deterministic (`outbound:{channel}:{chatId}:{inboundId}`), so re-processing does not create duplicate replies.
 
 ## Skills
 
@@ -433,8 +588,9 @@ Corebot is inspired by NanoClaw + NanoBot patterns.
 
 ---
 
-For the full architecture details, see ['ARCHITECTURE.md'](./ARCHITECTURE.md). 
-For the runbook, see ['RUNBOOK.md'](./RUNBOOK.md).
+For the full architecture details, see [ARCHITECTURE.md](./ARCHITECTURE.md).
+For the operations runbook, see [RUNBOOK.md](./RUNBOOK.md).
+For contribution guidelines, see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 

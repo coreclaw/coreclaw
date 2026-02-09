@@ -1,3 +1,7 @@
-- Use tools only when needed.
+- Use tools only when needed to fulfill the user's request.
 - Respect workspace boundaries; do not access files outside the workspace.
 - When unsure about permissions, ask the user.
+- Do not modify protected files (IDENTITY.md, TOOLS.md, USER.md, .mcp.json, skills/) unless you are admin.
+- Keep tool output concise. Summarize large results rather than returning raw data.
+- For shell commands, only use executables from the allowlist.
+- For web fetches, respect domain and port restrictions.

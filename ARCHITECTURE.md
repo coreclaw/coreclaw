@@ -93,6 +93,17 @@ ContextBuilder assembles a system prompt and runtime messages from:
 6) **Conversation Summary**: compacted summary when available
 7) **Recent History**: last N messages (configurable)
 
+### Per-Chat Memory
+- **Global memory**: `workspace/memory/MEMORY.md` — shared across all chats.
+- **Chat memory**: `workspace/memory/{channel}_{chatId}.md` — scoped to a specific chat.
+- Both are included in the system prompt when available, except isolated scheduled-task runs (chat memory excluded).
+
+### Conversation Compaction
+- When stored message count exceeds `historyMaxMessages * 2`, compaction triggers.
+- The LLM generates a bullet summary of recent messages (max 150 words).
+- Old messages beyond `historyMaxMessages` are pruned from storage.
+- The summary is stored in `conversation_state` and included in future system prompts.
+
 ### Progressive Skill Loading
 - System prompt includes only a **skills index**.
 - Detailed skill content is read by tool call (`skills.read`) when needed.
@@ -119,7 +130,7 @@ export interface LlmProvider {
 - Max tool iterations (`maxToolIterations`, default 8).
 - Each tool call executed via `ToolRegistry.execute()`.
 - High-risk tools can run in a dedicated isolated worker process (`isolation` config).
-  - Current isolated built-ins: `shell.exec`, `web.fetch`, `fs.write`.
+  - Isolatable built-ins: `shell.exec` (default), `web.fetch`, `fs.write` (opt-in via `isolation.toolNames`).
 - Tool output size capped (`maxToolOutputChars`).
 - Returns final response or a fallback if tool loop exhausts.
 
@@ -156,10 +167,9 @@ Unifies three tool sources:
 - Applies server/tool allowlists before registration.
 - Re-syncs config dynamically during inbound processing (no restart required).
 
-### 8.2 MCP Server (Optional)
-- Can expose host capabilities (message sending, scheduler, memory, admin ops)
-- Single-process can implement these directly
-- Container mode can bridge via IPC
+### 8.2 MCP Server (Future)
+> Not yet implemented. A future extension may expose Corebot's own capabilities
+> (message sending, scheduler, memory, admin ops) as an MCP server for external clients.
 
 ---
 
@@ -170,9 +180,10 @@ Unifies three tool sources:
 skills/
   web-research/
     SKILL.md
-    tools.ts        # optional
-    mcp.json        # optional
 ```
+
+Each skill is a single `SKILL.md` file with YAML frontmatter and markdown body.
+The loader discovers skills by scanning `workspace/skills/*/SKILL.md`.
 
 ### 9.2 Frontmatter Example
 ```markdown
@@ -260,6 +271,7 @@ erDiagram
   task_runs {
     int id PK
     string task_fk
+    string inbound_id
     string run_at
     int duration_ms
     string status  "success|error"
@@ -267,10 +279,59 @@ erDiagram
     string error
   }
 
+  message_queue {
+    string id PK
+    string direction  "inbound|outbound"
+    string payload
+    string status  "pending|processing|processed|dead_letter"
+    int attempts
+    int max_attempts
+    string available_at
+    string created_at
+    string claimed_at
+    string processed_at
+    string dead_lettered_at
+    string last_error
+  }
+
+  message_dedupe {
+    string direction PK
+    string idempotency_key PK
+    string queue_id
+    string created_at
+  }
+
+  inbound_executions {
+    string channel PK
+    string chat_id PK
+    string inbound_id PK
+    string status  "running|completed"
+    string response_content
+    string tool_messages_json
+    string started_at
+    string completed_at
+  }
+
+  audit_events {
+    int id PK
+    string at
+    string event_type
+    string tool_name
+    string chat_fk
+    string channel
+    string chat_id
+    string actor_role
+    string outcome  "success|denied|error|invalid_args"
+    string reason
+    string args_json
+    string metadata_json
+  }
+
   chats ||--o{ messages : has
   chats ||--|| conversation_state : has
   chats ||--o{ tasks : has
   tasks ||--o{ task_runs : has
+  message_dedupe }o--|| message_queue : references
 ```
 
 ### Storage Strategy
@@ -284,15 +345,66 @@ erDiagram
 
 ## 12) Security Boundaries
 
-- **Workspace sandbox** for file access.
-- **Shell execution** disabled by default (allowlist optional).
-- **Env filtering**: only allowlisted env vars available to tools.
-- **Policy guardrails**: non-admin `fs.write` cannot modify protected paths (`skills/`, `IDENTITY.md`, `TOOLS.md`, `USER.md`, `.mcp.json`).
-- **MCP allowlist**: only explicitly allowed servers/tools are registered or callable.
-- **Isolation bulkhead + circuit breaker**: worker concurrency cap and per-tool fail-open cooldown.
-- **Tool output truncation** to avoid large prompts/logs.
+### 12.1 Workspace Sandbox
+- All file operations (`fs.read`, `fs.write`, `fs.list`) are restricted to `workspace/`.
+- Path traversal attempts outside workspace are rejected by `resolveWorkspacePath()`.
 
-Optional container isolation can be added later for stronger protection.
+### 12.2 Role-Based Policy Engine
+The `DefaultToolPolicyEngine` enforces the following rules:
+
+| Tool | Normal User | Admin |
+|------|-------------|-------|
+| `shell.exec` | Denied | Allowed (if `allowShell=true`) |
+| `fs.write` to protected paths | Denied | Allowed |
+| `memory.write` (global scope) | Denied | Allowed |
+| `message.send` (cross-chat) | Denied | Allowed |
+| `chat.register` (other chats) | Denied | Allowed |
+| `chat.set_role` | Denied | Allowed |
+| `tasks.update` (other chats) | Denied | Allowed |
+| `mcp.reload` | Denied | Allowed |
+| `bus.dead_letter.*` | Denied | Allowed |
+| `mcp__*` (all MCP tools) | Denied | Allowed |
+| `web.fetch` | Domain/port policy checked | Domain/port policy checked |
+
+**Protected workspace paths** (non-admin `fs.write` denied): `IDENTITY.md`, `TOOLS.md`, `USER.md`, `.mcp.json`, `skills/`.
+
+### 12.3 Admin Bootstrap
+- First admin is created via `chat.register` with `role=admin` and a `bootstrapKey`.
+- The key must match `adminBootstrapKey` in config.
+- Single-use mode: key is invalidated after first successful use.
+- Lockout: after `adminBootstrapMaxAttempts` failures, bootstrap is locked for `adminBootstrapLockoutMinutes`.
+- Once an admin exists, new admins can only be granted by existing admins via `chat.set_role`.
+
+### 12.4 Shell Execution
+- Disabled by default (`allowShell=false`).
+- Optional allowlist of executable names (`allowedShellCommands`).
+- Commands are tokenized and executed directly (no shell interpreter), preventing injection.
+
+### 12.5 Web Policies
+- `allowedWebDomains`: restrict `web.fetch` to specific hosts.
+- `allowedWebPorts` / `blockedWebPorts`: port-level allow/deny controls.
+- Only `http://` and `https://` protocols are permitted.
+
+### 12.6 Environment Filtering
+- `web.search` reads env keys only from `allowedEnv` (for example `BRAVE_API_KEY`).
+- Isolated shell workers inherit only system PATH + explicitly allowed keys.
+- Non-isolated `shell.exec` inherits process env when shell execution is enabled.
+
+### 12.7 MCP Allowlists
+- `allowedMcpServers`: when non-empty, only listed servers are connected (empty means allow all).
+- `allowedMcpTools`: when non-empty, only matching tools are registered (supports `*` wildcard patterns; empty means allow all).
+
+### 12.8 Isolation Bulkhead + Circuit Breaker
+- High-risk tools (`shell.exec`, `web.fetch`, `fs.write`) can run in isolated worker processes.
+- Worker concurrency cap (`maxConcurrentWorkers`, default 4).
+- Per-tool circuit breaker: opens after N consecutive failures, resets after cooldown.
+
+### 12.9 Audit Trail
+- All tool executions are recorded in `audit_events` (success, denied, error, invalid_args).
+- Sensitive argument keys (`key`, `token`, `secret`, `password`, `authorization`, `cookie`) are redacted.
+
+### 12.10 Output Truncation
+- Tool output is capped at `maxToolOutputChars` (default 50,000) to prevent prompt inflation.
 
 ---
 
@@ -302,53 +414,80 @@ Optional container isolation can be added later for stronger protection.
 corebot/
   package.json
   tsconfig.json
+  Dockerfile
+  ARCHITECTURE.md
+  RUNBOOK.md
   src/
-    main.ts
+    main.ts              # Entry point, signal handling
+    app.ts               # CorebotApp class, lifecycle management
+    bin.ts               # CLI handler (--help, --version)
+    index.ts             # SDK exports
+    types.ts             # Core type definitions
     config/
-      schema.ts
-      load.ts
+      schema.ts          # Zod config schema
+      load.ts            # Load config from file + env
     bus/
-      bus.ts
-      queue.ts
-      router.ts
+      bus.ts             # MessageBus: durable queue, backpressure, rate limits
+      queue.ts           # AsyncQueue<T> (in-memory signal queue)
+      router.ts          # ConversationRouter: per-chat serialization
     channels/
-      base.ts
-      cli.ts
-      whatsapp.ts
-      telegram.ts
-      webhook.ts
+      base.ts            # Channel interface
+      cli.ts             # CLI channel (readline)
+      webhook.ts         # HTTP webhook channel (inbound POST + outbound GET)
+      whatsapp.ts        # WhatsApp adapter (stub)
+      telegram.ts        # Telegram adapter (stub)
     agent/
-      runtime.ts
-      context.ts
-      compact.ts
+      runtime.ts         # AgentRuntime + OpenAICompatibleProvider
+      context.ts         # ContextBuilder (system prompt assembly)
+      compact.ts         # Conversation compaction via LLM summarization
     tools/
-      registry.ts
+      registry.ts        # ToolRegistry: register, execute, audit
+      policy.ts          # DefaultToolPolicyEngine (role-based auth)
+      web-guard.ts       # Domain/port allowlist validation
+      web-fetch-core.ts  # Shared fetch helpers
       builtins/
-        fs.ts
-        shell.ts
-        web.ts
-        memory.ts
-        message.ts
-        tasks.ts
-        skills.ts
+        index.ts         # Export all built-in tools
+        fs.ts            # fs.read, fs.write, fs.list
+        shell.ts         # shell.exec
+        web.ts           # web.fetch, web.search
+        memory.ts        # memory.read, memory.write
+        message.ts       # message.send, chat.register, chat.set_role
+        tasks.ts         # tasks.schedule, tasks.list, tasks.update
+        skills.ts        # skills.list, skills.read, skills.enable, skills.disable, skills.enabled
+        mcp.ts           # mcp.reload
+        bus.ts           # bus.dead_letter.list, bus.dead_letter.replay
     mcp/
-      manager.ts
-      types.ts
+      manager.ts         # MCP client: connect, discover, call
+      allowlist.ts       # Server/tool allowlist enforcement
+      types.ts           # MCP configuration types
     skills/
-      loader.ts
-      types.ts
+      loader.ts          # Discover and parse SKILL.md files
+      types.ts           # SkillIndexEntry, SkillMeta
     storage/
-      sqlite.ts
-      migrations.ts
+      sqlite.ts          # SQLite storage (WAL, migrations, CRUD)
+      migrations.ts      # Schema migrations v1–v6
     scheduler/
-      scheduler.ts
-      utils.ts
+      scheduler.ts       # Task scheduler (tick + emit)
+      utils.ts           # computeNextRun (cron/interval/once)
+    isolation/
+      runtime.ts         # IsolatedToolRuntime: worker pool, circuit breaker
+      worker-process.ts  # Isolated worker script
     observability/
-      logger.ts
+      logger.ts          # Pino structured JSON logger
+      telemetry.ts       # RuntimeTelemetry: metrics counters
+      metrics.ts         # Prometheus-format metrics endpoint
+      server.ts          # ObservabilityServer: HTTP /health /metrics /status
+      slo.ts             # SloMonitor: threshold alerts
     util/
-      ids.ts
-      time.ts
-      file.ts
+      ids.ts             # newId() (nanoid)
+      time.ts            # nowIso(), sleep()
+      file.ts            # resolveWorkspacePath()
+  scripts/
+    db-backup.ts         # Database backup script
+    db-restore.ts        # Database restore script
+    smoke-package.ts     # Release smoke test
+  test/
+    *.test.ts            # 19 test files (unit + integration + e2e)
   workspace/
     IDENTITY.md
     USER.md
@@ -356,7 +495,7 @@ corebot/
     memory/
       MEMORY.md
     skills/
-      ...
+      corebot-help/SKILL.md
 ```
 
 ---
@@ -411,32 +550,31 @@ sequenceDiagram
 
 ## 15) Configuration
 
-`config.json` or environment variables:
+`config.json` or environment variables. See `README.md` for the full reference.
 
-- `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`
-- `COREBOT_SQLITE_PATH`, `COREBOT_WORKSPACE`
-- `COREBOT_ALLOW_SHELL` + `COREBOT_SHELL_ALLOWLIST`
-- `COREBOT_ALLOWED_ENV`
-- `COREBOT_ISOLATION_ENABLED`, `COREBOT_ISOLATION_TOOLS`
-- `COREBOT_ISOLATION_WORKER_TIMEOUT_MS`, `COREBOT_ISOLATION_MAX_WORKER_OUTPUT_CHARS`
-- `COREBOT_ISOLATION_MAX_CONCURRENT_WORKERS`
-- `COREBOT_ISOLATION_OPEN_CIRCUIT_AFTER_FAILURES`, `COREBOT_ISOLATION_CIRCUIT_RESET_MS`
-  - `COREBOT_ISOLATION_TOOLS` can include `shell.exec`, `web.fetch`, `fs.write`.
-- `COREBOT_HISTORY_MAX`, `COREBOT_MAX_TOOL_ITER`
-- `COREBOT_MCP_CONFIG`
+Key config areas: provider, bus (queue/retry/rate-limit), observability, SLO, isolation, security (shell/web/MCP allowlists), admin bootstrap, webhook, CLI.
 
 ---
 
 ## 16) Implementation Status (Repo)
 
 - ✅ CLI channel
-- ✅ Agent runtime with tool loop
-- ✅ Built-in tools
+- ✅ Webhook channel (inbound POST + outbound GET)
+- ✅ Agent runtime with tool-calling loop
+- ✅ Built-in tools (9 tool modules)
+- ✅ Role-based tool policy engine (admin/normal)
 - ✅ SQLite storage + conversation state + task runs
+- ✅ Durable message queue with idempotent publish, retry, and dead-letter
+- ✅ Inbound execution ledger for re-processing idempotency
+- ✅ Bus backpressure + per-chat rate limiting
 - ✅ Scheduler (cron/interval/once)
-- ✅ Skills index + progressive loading
-- ✅ MCP client tool injection
-- ⏳ WhatsApp/Telegram/Webhook adapters (stubs only)
+- ✅ Skills index + progressive loading + hot-reload
+- ✅ MCP client tool injection + hot-reload
+- ✅ Isolated tool runtime with worker pool + circuit breaker
+- ✅ Observability (Prometheus metrics, health endpoints, SLO monitor)
+- ✅ Persistent audit events for tool execution
+- ✅ Migration safety with pre-migration backups
+- ⏳ WhatsApp/Telegram adapters (stubs only)
 - ⏳ Optional container isolation
 
 ---
@@ -444,10 +582,10 @@ sequenceDiagram
 ## 17) Future Extensions
 
 - Container sandbox for shell + tool execution
-- Additional providers (Anthropic/OpenRouter)
-- Multi-channel adapters
-- Fine-grained permission system
-- Observability hooks (metrics + tracing)
+- Additional LLM providers (Anthropic/OpenRouter)
+- WhatsApp and Telegram channel adapters
+- MCP server mode (expose Corebot capabilities to external clients)
+- Multi-instance coordination and queue partitioning
 
 ---
 
