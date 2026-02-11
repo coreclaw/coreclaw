@@ -242,7 +242,12 @@ export const loadConfig = (): Config => {
       model: process.env.OPENAI_MODEL,
       temperature: process.env.OPENAI_TEMPERATURE
         ? Number(process.env.OPENAI_TEMPERATURE)
-        : undefined
+        : undefined,
+      timeoutMs: process.env.COREBOT_PROVIDER_TIMEOUT_MS
+        ? Number(process.env.COREBOT_PROVIDER_TIMEOUT_MS)
+        : process.env.OPENAI_TIMEOUT_MS
+          ? Number(process.env.OPENAI_TIMEOUT_MS)
+          : undefined
     }
   };
 

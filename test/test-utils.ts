@@ -48,7 +48,8 @@ export const createConfig = (
       apiKey: "test-key",
       baseUrl: "https://api.openai.com/v1",
       model: "gpt-4o-mini",
-      temperature: 0.2
+      temperature: 0.2,
+      timeoutMs: 60_000
     },
     historyMaxMessages: 30,
     storeFullMessages: false,

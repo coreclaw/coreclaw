@@ -200,7 +200,8 @@ You can configure via `config.json` or environment variables.
     "type": "openai",
     "baseUrl": "https://api.openai.com/v1",
     "model": "gpt-4o-mini",
-    "temperature": 0.2
+    "temperature": 0.2,
+    "timeoutMs": 60000
   },
   "historyMaxMessages": 30,
   "storeFullMessages": false,
@@ -295,6 +296,8 @@ You can configure via `config.json` or environment variables.
 - `OPENAI_BASE_URL`
 - `OPENAI_MODEL`
 - `OPENAI_TEMPERATURE`
+- `OPENAI_TIMEOUT_MS` (deprecated alias for `COREBOT_PROVIDER_TIMEOUT_MS`)
+- `COREBOT_PROVIDER_TIMEOUT_MS`
 - `COREBOT_WORKSPACE`
 - `COREBOT_DATA_DIR`
 - `COREBOT_SQLITE_PATH`
@@ -383,6 +386,7 @@ Notes:
 - Default policy denies non-admin `fs.write` to protected paths (`skills/`, `IDENTITY.md`, `TOOLS.md`, `USER.md`, `.mcp.json`).
 - `COREBOT_MCP_ALLOWED_SERVERS` and `COREBOT_MCP_ALLOWED_TOOLS` act as allowlists when set; empty lists allow all discovered MCP servers/tools.
 - `COREBOT_MCP_SYNC_*` controls MCP auto-sync retry backoff and temporary circuit-open window after repeated failures.
+- `COREBOT_PROVIDER_TIMEOUT_MS` bounds each LLM request; timeout errors enter normal retry/dead-letter flow.
 - `COREBOT_HEARTBEAT_ACTIVE_HOURS` accepts `HH:mm-HH:mm` in local process time; empty means always active.
 - `COREBOT_HEARTBEAT_PROMPT_PATH` is resolved relative to `workspaceDir` and must be non-empty to dispatch heartbeat turns.
 - `COREBOT_WEBHOOK_AUTH_TOKEN` can be sent via `Authorization: Bearer <token>` or `x-corebot-token`.
