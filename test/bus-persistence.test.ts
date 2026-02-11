@@ -236,6 +236,60 @@ test("MessageBus deduplicates outbound publishes by message id", async () => {
   }
 });
 
+test("MessageBus times out stuck inbound handler and continues with next message", async () => {
+  const fixture = createStorageFixture({
+    bus: {
+      pollMs: 20,
+      batchSize: 10,
+      maxAttempts: 1,
+      retryBackoffMs: 10,
+      maxRetryBackoffMs: 100,
+      processingTimeoutMs: 60
+    }
+  });
+
+  const bus = new MessageBus(fixture.storage, fixture.config);
+  try {
+    let processed = 0;
+    bus.onInbound(async (message) => {
+      if (message.id === "msg-hang-1") {
+        await new Promise(() => undefined);
+      }
+      processed += 1;
+    });
+
+    bus.publishInbound({
+      id: "msg-hang-1",
+      channel: "cli",
+      chatId: "local",
+      senderId: "user",
+      content: "hang",
+      createdAt: new Date().toISOString()
+    });
+    bus.publishInbound({
+      id: "msg-ok-2",
+      channel: "cli",
+      chatId: "local",
+      senderId: "user",
+      content: "ok",
+      createdAt: new Date().toISOString()
+    });
+
+    bus.start();
+    await waitUntil(() => processed >= 1);
+    await waitUntil(() => fixture.storage.countBusMessagesByStatus("inbound").dead_letter >= 1);
+
+    const counts = fixture.storage.countBusMessagesByStatus("inbound");
+    assert.equal(counts.processed, 1);
+    assert.equal(counts.dead_letter, 1);
+    const dead = fixture.storage.listDeadLetterBusMessages("inbound", 10);
+    assert.match(dead[0]?.lastError ?? "", /timed out/i);
+  } finally {
+    bus.stop();
+    fixture.cleanup();
+  }
+});
+
 test("MessageBus dead-letters new inbound messages when queue is full", async () => {
   const fixture = createStorageFixture({
     bus: {

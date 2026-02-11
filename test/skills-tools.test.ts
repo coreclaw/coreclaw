@@ -90,3 +90,87 @@ test("ContextBuilder injects enabled skill bodies", () => {
     fixture.cleanup();
   }
 });
+
+test("ContextBuilder drops oldest history entries to respect token budget", () => {
+  const fixture = createStorageFixture({
+    provider: {
+      maxInputTokens: 220,
+      reserveOutputTokens: 100
+    }
+  });
+  try {
+    const chat = fixture.storage.upsertChat({ channel: "cli", chatId: "local" });
+    fixture.storage.insertMessage({
+      chatFk: chat.id,
+      senderId: "u1",
+      role: "user",
+      content: `OLD-${"a".repeat(420)}`,
+      stored: true,
+      createdAt: new Date(Date.now() - 2_000).toISOString()
+    });
+    fixture.storage.insertMessage({
+      chatFk: chat.id,
+      senderId: "a1",
+      role: "assistant",
+      content: `NEW-${"b".repeat(420)}`,
+      stored: true,
+      createdAt: new Date(Date.now() - 1_000).toISOString()
+    });
+
+    const builder = new ContextBuilder(fixture.storage, fixture.config, fixture.workspaceDir);
+    const built = builder.build({
+      chat,
+      skills: [],
+      inbound: {
+        id: "budget-1",
+        channel: "cli",
+        chatId: "local",
+        senderId: "user",
+        content: `INBOUND-${"c".repeat(120)}`,
+        createdAt: new Date().toISOString()
+      }
+    });
+
+    const contents = built.messages
+      .flatMap((message) =>
+        "content" in message && typeof message.content === "string" ? [message.content] : []
+      )
+      .join("\n");
+    assert.ok(contents.includes("INBOUND-"));
+    assert.ok(!contents.includes("OLD-"));
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("ContextBuilder truncates oversized system prompt under token budget", () => {
+  const fixture = createStorageFixture({
+    provider: {
+      maxInputTokens: 180,
+      reserveOutputTokens: 120
+    }
+  });
+  try {
+    fs.writeFileSync(path.join(fixture.workspaceDir, "IDENTITY.md"), "x".repeat(2_000), "utf-8");
+    const chat = fixture.storage.upsertChat({ channel: "cli", chatId: "local" });
+    const builder = new ContextBuilder(fixture.storage, fixture.config, fixture.workspaceDir);
+    const built = builder.build({
+      chat,
+      skills: [],
+      inbound: {
+        id: "budget-2",
+        channel: "cli",
+        chatId: "local",
+        senderId: "user",
+        content: `REQUEST-${"y".repeat(120)}`,
+        createdAt: new Date().toISOString()
+      }
+    });
+
+    assert.match(built.systemPrompt, /\[truncated by token budget\]/);
+    const last = built.messages[built.messages.length - 1];
+    assert.ok(last && "content" in last && String(last.content).includes("REQUEST-"));
+  } finally {
+    fixture.cleanup();
+  }
+});

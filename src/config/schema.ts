@@ -14,7 +14,9 @@ export const ConfigSchema = z.object({
       baseUrl: z.string().default("https://api.openai.com/v1"),
       model: z.string().default("gpt-4o-mini"),
       temperature: z.number().default(0.2),
-      timeoutMs: z.number().int().min(1_000).max(300_000).default(60_000)
+      timeoutMs: z.number().int().min(1_000).max(300_000).default(60_000),
+      maxInputTokens: z.number().int().min(1_024).max(2_000_000).default(128_000),
+      reserveOutputTokens: z.number().int().min(256).max(200_000).default(4_096)
     })
     .prefault({}),
   historyMaxMessages: z.number().default(30),

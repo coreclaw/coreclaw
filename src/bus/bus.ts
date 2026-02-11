@@ -9,6 +9,26 @@ export type InboundHandler = (message: InboundMessage) => Promise<void>;
 export type OutboundHandler = (message: OutboundMessage) => Promise<void>;
 type BusLogger = Pick<Logger, "error" | "warn" | "info" | "debug">;
 
+const withTimeout = async <T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string
+): Promise<T> => {
+  let timer: NodeJS.Timeout | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+};
+
 export class MessageBus {
   private inboundSignal = new AsyncQueue<number>();
   private outboundSignal = new AsyncQueue<number>();
@@ -216,9 +236,17 @@ export class MessageBus {
       try {
         const message = JSON.parse(record.payload) as InboundMessage | OutboundMessage;
         if (direction === "inbound") {
-          await this.dispatchInbound(message as InboundMessage);
+          await withTimeout(
+            this.dispatchInbound(message as InboundMessage),
+            this.config.bus.processingTimeoutMs,
+            `Inbound handler timed out after ${this.config.bus.processingTimeoutMs}ms`
+          );
         } else {
-          await this.dispatchOutbound(message as OutboundMessage);
+          await withTimeout(
+            this.dispatchOutbound(message as OutboundMessage),
+            this.config.bus.processingTimeoutMs,
+            `Outbound handler timed out after ${this.config.bus.processingTimeoutMs}ms`
+          );
         }
         this.storage.markBusMessageProcessed(record.id, nowIso());
         processed += 1;

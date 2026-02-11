@@ -247,7 +247,13 @@ export const loadConfig = (): Config => {
         ? Number(process.env.COREBOT_PROVIDER_TIMEOUT_MS)
         : process.env.OPENAI_TIMEOUT_MS
           ? Number(process.env.OPENAI_TIMEOUT_MS)
-          : undefined
+          : undefined,
+      maxInputTokens: process.env.COREBOT_PROVIDER_MAX_INPUT_TOKENS
+        ? Number(process.env.COREBOT_PROVIDER_MAX_INPUT_TOKENS)
+        : undefined,
+      reserveOutputTokens: process.env.COREBOT_PROVIDER_RESERVE_OUTPUT_TOKENS
+        ? Number(process.env.COREBOT_PROVIDER_RESERVE_OUTPUT_TOKENS)
+        : undefined
     }
   };
 

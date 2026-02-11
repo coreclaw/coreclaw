@@ -27,6 +27,101 @@ const renderSkillsIndex = (skills: SkillIndexEntry[], enabledSkills: Set<string>
     .join("\n");
 };
 
+const ESTIMATED_CHARS_PER_TOKEN = 4;
+const MESSAGE_OVERHEAD_TOKENS = 4;
+
+const estimateTextTokens = (text: string) =>
+  Math.max(1, Math.ceil(text.length / ESTIMATED_CHARS_PER_TOKEN));
+
+const estimateMessageTokens = (message: ChatMessage) => {
+  let total = MESSAGE_OVERHEAD_TOKENS;
+  if (typeof message.content === "string") {
+    total += estimateTextTokens(message.content);
+  }
+  if ("tool_calls" in message && Array.isArray(message.tool_calls)) {
+    for (const call of message.tool_calls) {
+      total += estimateTextTokens(call.function.name);
+      total += estimateTextTokens(call.function.arguments);
+    }
+  }
+  if ("tool_call_id" in message && typeof message.tool_call_id === "string") {
+    total += estimateTextTokens(message.tool_call_id);
+  }
+  return total;
+};
+
+const estimateConversationTokens = (messages: ChatMessage[]) =>
+  messages.reduce((sum, message) => sum + estimateMessageTokens(message), 0);
+
+const truncateTextToApproxTokens = (text: string, maxTokens: number) => {
+  if (maxTokens <= 0) {
+    return "";
+  }
+  const maxChars = maxTokens * ESTIMATED_CHARS_PER_TOKEN;
+  if (text.length <= maxChars) {
+    return text;
+  }
+  const suffix = "\n...[truncated by token budget]";
+  const keep = Math.max(0, maxChars - suffix.length);
+  return `${text.slice(0, keep)}${suffix}`;
+};
+
+const applyTokenBudget = (
+  messages: ChatMessage[],
+  maxInputTokens: number,
+  reserveOutputTokens: number
+) => {
+  if (messages.length === 0) {
+    return messages;
+  }
+
+  const budget = Math.max(256, maxInputTokens - reserveOutputTokens);
+  if (estimateConversationTokens(messages) <= budget) {
+    return messages;
+  }
+
+  const [systemMessage, ...rest] = messages;
+  const tail = [...rest];
+
+  while (tail.length > 1 && estimateConversationTokens([systemMessage, ...tail]) > budget) {
+    tail.shift();
+  }
+
+  let nextSystem = systemMessage;
+  let candidate = [nextSystem, ...tail];
+  if (estimateConversationTokens(candidate) > budget && nextSystem.role === "system") {
+    const tailTokens = estimateConversationTokens(tail);
+    const availableForSystem = Math.max(64, budget - tailTokens - MESSAGE_OVERHEAD_TOKENS);
+    nextSystem = {
+      ...nextSystem,
+      content: truncateTextToApproxTokens(nextSystem.content, availableForSystem)
+    };
+    candidate = [nextSystem, ...tail];
+  }
+
+  if (candidate.length > 0 && estimateConversationTokens(candidate) > budget) {
+    const lastIndex = candidate.length - 1;
+    const last = candidate[lastIndex];
+    if (
+      last &&
+      (last.role === "user" || last.role === "assistant" || last.role === "system")
+    ) {
+      const tokensWithoutLast =
+        estimateConversationTokens(candidate) - estimateMessageTokens(last);
+      const availableForLast = Math.max(
+        32,
+        budget - tokensWithoutLast - MESSAGE_OVERHEAD_TOKENS
+      );
+      candidate[lastIndex] = {
+        ...last,
+        content: truncateTextToApproxTokens(last.content, availableForLast)
+      };
+    }
+  }
+
+  return candidate;
+};
+
 export class ContextBuilder {
   constructor(
     private storage: SqliteStorage,
@@ -135,6 +230,15 @@ export class ContextBuilder {
 
     messages.push({ role: "user", content: userContent });
 
-    return { messages, systemPrompt };
+    const bounded = applyTokenBudget(
+      messages,
+      this.config.provider.maxInputTokens,
+      this.config.provider.reserveOutputTokens
+    );
+    const first = bounded[0];
+    const boundedSystemPrompt =
+      first && first.role === "system" ? first.content : systemPrompt;
+
+    return { messages: bounded, systemPrompt: boundedSystemPrompt };
   }
 }

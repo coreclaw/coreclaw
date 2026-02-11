@@ -201,7 +201,9 @@ You can configure via `config.json` or environment variables.
     "baseUrl": "https://api.openai.com/v1",
     "model": "gpt-4o-mini",
     "temperature": 0.2,
-    "timeoutMs": 60000
+    "timeoutMs": 60000,
+    "maxInputTokens": 128000,
+    "reserveOutputTokens": 4096
   },
   "historyMaxMessages": 30,
   "storeFullMessages": false,
@@ -298,6 +300,8 @@ You can configure via `config.json` or environment variables.
 - `OPENAI_TEMPERATURE`
 - `OPENAI_TIMEOUT_MS` (deprecated alias for `COREBOT_PROVIDER_TIMEOUT_MS`)
 - `COREBOT_PROVIDER_TIMEOUT_MS`
+- `COREBOT_PROVIDER_MAX_INPUT_TOKENS`
+- `COREBOT_PROVIDER_RESERVE_OUTPUT_TOKENS`
 - `COREBOT_WORKSPACE`
 - `COREBOT_DATA_DIR`
 - `COREBOT_SQLITE_PATH`
@@ -387,6 +391,7 @@ Notes:
 - `COREBOT_MCP_ALLOWED_SERVERS` and `COREBOT_MCP_ALLOWED_TOOLS` act as allowlists when set; empty lists allow all discovered MCP servers/tools.
 - `COREBOT_MCP_SYNC_*` controls MCP auto-sync retry backoff and temporary circuit-open window after repeated failures.
 - `COREBOT_PROVIDER_TIMEOUT_MS` bounds each LLM request; timeout errors enter normal retry/dead-letter flow.
+- `COREBOT_PROVIDER_MAX_INPUT_TOKENS` and `COREBOT_PROVIDER_RESERVE_OUTPUT_TOKENS` enforce prompt budgeting before each LLM turn.
 - `COREBOT_HEARTBEAT_ACTIVE_HOURS` accepts `HH:mm-HH:mm` in local process time; empty means always active.
 - `COREBOT_HEARTBEAT_PROMPT_PATH` is resolved relative to `workspaceDir` and must be non-empty to dispatch heartbeat turns.
 - `COREBOT_WEBHOOK_AUTH_TOKEN` can be sent via `Authorization: Bearer <token>` or `x-corebot-token`.
