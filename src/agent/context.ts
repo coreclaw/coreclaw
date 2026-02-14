@@ -4,6 +4,8 @@ import type { InboundMessage, ChatMessage, ChatRecord } from "../types.js";
 import type { SqliteStorage } from "../storage/sqlite.js";
 import type { Config } from "../config/schema.js";
 import type { SkillIndexEntry } from "../skills/types.js";
+import type { RunMode } from "./run-mode.js";
+import { formatUserContentForRunMode, shouldIncludeChatContext } from "./run-mode.js";
 
 const readIfExists = (filePath: string) =>
   fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf-8").trim() : "";
@@ -132,6 +134,7 @@ export class ContextBuilder {
   build(params: {
     chat: ChatRecord;
     inbound: InboundMessage;
+    runMode: RunMode;
     skills: SkillIndexEntry[];
   }): { messages: ChatMessage[]; systemPrompt: string } {
     const identityPath = path.join(this.workspaceDir, "IDENTITY.md");
@@ -150,10 +153,7 @@ export class ContextBuilder {
     const chatMemory = readIfExists(chatMemoryPath);
 
     const state = this.storage.getConversationState(params.chat.id);
-    const isScheduled = Boolean(params.inbound.metadata?.isScheduledTask);
-    const contextMode =
-      (params.inbound.metadata?.contextMode as string | undefined) ?? "group";
-    const includeChatContext = !isScheduled || contextMode === "group";
+    const includeChatContext = shouldIncludeChatContext(params.runMode);
     const enabledSkills = new Set(state.enabledSkills);
 
     const systemSections: string[] = [];
@@ -224,9 +224,10 @@ export class ContextBuilder {
       }
     }
 
-    const userContent = isScheduled
-      ? `[Scheduled Task] ${params.inbound.content}`
-      : params.inbound.content;
+    const userContent = formatUserContentForRunMode(
+      params.runMode,
+      params.inbound.content
+    );
 
     messages.push({ role: "user", content: userContent });
 

@@ -8,6 +8,11 @@ import type { Config } from "../config/schema.js";
 import type { Logger } from "pino";
 import type { SkillIndexEntry } from "../skills/types.js";
 import { compactConversation } from "../agent/compact.js";
+import {
+  isHeartbeatRunMode,
+  resolveRunMode,
+  shouldWakeHeartbeatAfterRun
+} from "../agent/run-mode.js";
 import { nowIso } from "../util/time.js";
 import type { McpManager } from "../mcp/manager.js";
 import type { IsolatedToolRuntime } from "../isolation/runtime.js";
@@ -90,6 +95,7 @@ export class ConversationRouter {
     }
 
     const skills = this.resolveSkills();
+    const runMode = resolveRunMode(message);
 
     const executionNow = nowIso();
     const execution = this.storage.startInboundExecution({
@@ -116,6 +122,7 @@ export class ConversationRouter {
     const { messages } = this.contextBuilder.build({
       chat,
       inbound: message,
+      runMode,
       skills
     });
 
@@ -233,8 +240,7 @@ export class ConversationRouter {
       createdAt: nowIso(),
       replyToId: message.id
     };
-    const isHeartbeat = Boolean(message.metadata?.isHeartbeat);
-    if (isHeartbeat) {
+    if (isHeartbeatRunMode(runMode)) {
       const delivery = this.handleHeartbeatDelivery({
         message,
         chat,
@@ -249,7 +255,9 @@ export class ConversationRouter {
       }
     } else {
       this.bus.publishOutbound(outbound);
-      this.wakeHeartbeat?.("router:message-processed");
+      if (shouldWakeHeartbeatAfterRun(runMode)) {
+        this.wakeHeartbeat?.("router:message-processed");
+      }
     }
 
     if (message.metadata?.taskId) {
