@@ -5,7 +5,11 @@ import type { SqliteStorage } from "../storage/sqlite.js";
 import type { Config } from "../config/schema.js";
 import type { SkillIndexEntry } from "../skills/types.js";
 import type { RunMode } from "./run-mode.js";
-import { formatUserContentForRunMode, shouldIncludeChatContext } from "./run-mode.js";
+import {
+  formatUserContentForRunMode,
+  resolveRunMode,
+  shouldIncludeChatContext
+} from "./run-mode.js";
 
 const readIfExists = (filePath: string) =>
   fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf-8").trim() : "";
@@ -134,7 +138,7 @@ export class ContextBuilder {
   build(params: {
     chat: ChatRecord;
     inbound: InboundMessage;
-    runMode: RunMode;
+    runMode?: RunMode;
     skills: SkillIndexEntry[];
   }): { messages: ChatMessage[]; systemPrompt: string } {
     const identityPath = path.join(this.workspaceDir, "IDENTITY.md");
@@ -152,8 +156,9 @@ export class ContextBuilder {
     const globalMemory = readIfExists(globalMemoryPath);
     const chatMemory = readIfExists(chatMemoryPath);
 
+    const runMode = params.runMode ?? resolveRunMode(params.inbound);
     const state = this.storage.getConversationState(params.chat.id);
-    const includeChatContext = shouldIncludeChatContext(params.runMode);
+    const includeChatContext = shouldIncludeChatContext(runMode);
     const enabledSkills = new Set(state.enabledSkills);
 
     const systemSections: string[] = [];
@@ -225,7 +230,7 @@ export class ContextBuilder {
     }
 
     const userContent = formatUserContentForRunMode(
-      params.runMode,
+      runMode,
       params.inbound.content
     );
 

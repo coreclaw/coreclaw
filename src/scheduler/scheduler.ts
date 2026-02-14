@@ -125,7 +125,10 @@ export class Scheduler {
         .filter((delay): delay is number => typeof delay === "number");
       this.telemetry?.recordSchedulerDispatch(delaysMs);
 
-      this.bus.wakeInbound();
+      const wakeInbound = (this.bus as unknown as { wakeInbound?: () => void }).wakeInbound;
+      if (typeof wakeInbound === "function") {
+        wakeInbound.call(this.bus);
+      }
       this.wakeHeartbeat?.("scheduler:dispatch");
       this.logger.info(
         {

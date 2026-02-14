@@ -93,9 +93,17 @@ test("HeartbeatService skips without prompt and dispatches force run when prompt
     );
     assert.equal(listPendingInbound(fixture.storage).length, 0);
 
-    fs.writeFileSync(path.join(fixture.workspaceDir, "HEARTBEAT.md"), "hb prompt");
+    const templatePath = path.join(fixture.workspaceDir, "HEARTBEAT.md");
+    assert.equal(fs.existsSync(templatePath), true);
+
+    fs.writeFileSync(templatePath, "hb prompt");
     heartbeat.requestNow({ reason: "test:force", force: true });
-    await waitUntil(() => listPendingInbound(fixture.storage).length >= 2);
+    await waitUntil(() => {
+      const payloads = listPendingInbound(fixture.storage).map((row) =>
+        JSON.parse(row.payload) as { content: string }
+      );
+      return payloads.filter((payload) => payload.content === "hb prompt").length >= 2;
+    });
 
     const payloads = listPendingInbound(fixture.storage).map((row) => {
       return JSON.parse(row.payload) as {
@@ -103,13 +111,61 @@ test("HeartbeatService skips without prompt and dispatches force run when prompt
         metadata?: Record<string, unknown>;
       };
     });
-    assert.equal(payloads.length, 2);
-    for (const payload of payloads) {
-      assert.equal(payload.content, "hb prompt");
+    const hbPromptPayloads = payloads.filter((payload) => payload.content === "hb prompt");
+    assert.ok(hbPromptPayloads.length >= 2);
+    for (const payload of hbPromptPayloads) {
       assert.equal(payload.metadata?.isHeartbeat, true);
     }
   } finally {
     heartbeat.stop();
+    fixture.cleanup();
+  }
+});
+
+
+test("HeartbeatService supports custom wake event source plugins", async () => {
+  const fixture = createStorageFixture({
+    heartbeat: {
+      enabled: true,
+      intervalMs: 60_000,
+      wakeDebounceMs: 50,
+      wakeRetryMs: 100,
+      promptPath: "HEARTBEAT.md",
+      maxDispatchPerRun: 10
+    }
+  });
+  const logger = createNoopLogger();
+  const bus = new MessageBus(fixture.storage, fixture.config, logger);
+  const heartbeat = new HeartbeatService(fixture.storage, bus, fixture.config, logger);
+  let stopped = false;
+
+  try {
+    fixture.storage.upsertChat({ channel: "cli", chatId: "alpha" });
+    fs.writeFileSync(path.join(fixture.workspaceDir, "HEARTBEAT.md"), "hb prompt");
+
+    heartbeat.registerEventSource({
+      name: "test-source",
+      start(emit) {
+        emit({ reason: "heartbeat:test-source", force: true });
+        return () => {
+          stopped = true;
+        };
+      }
+    });
+
+    heartbeat.start();
+
+    await waitUntil(() => {
+      const payloads = listPendingInbound(fixture.storage).map((row) =>
+        JSON.parse(row.payload) as { metadata?: Record<string, unknown> }
+      );
+      return payloads.some((payload) =>
+        String(payload.metadata?.heartbeatReason ?? "").includes("heartbeat:test-source")
+      );
+    });
+  } finally {
+    heartbeat.stop();
+    assert.equal(stopped, true);
     fixture.cleanup();
   }
 });

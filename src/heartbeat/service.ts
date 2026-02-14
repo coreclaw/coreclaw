@@ -8,6 +8,11 @@ import type { MessageBus } from "../bus/bus.js";
 import type { RuntimeTelemetry } from "../observability/telemetry.js";
 import { newId } from "../util/ids.js";
 import { nowIso } from "../util/time.js";
+import {
+  createIntervalHeartbeatSource,
+  type HeartbeatEventSource,
+  type HeartbeatWakeEvent
+} from "./events.js";
 
 type ActiveHoursWindow = {
   startMinutes: number;
@@ -18,6 +23,19 @@ const normalizeText = (text: string) => text.trim().replace(/\s+/g, " ");
 
 const hashText = (text: string) =>
   createHash("sha256").update(normalizeText(text).toLowerCase()).digest("hex");
+
+const DEFAULT_HEARTBEAT_TEMPLATE = `# Heartbeat Checklist
+
+Add autonomous checks that should run periodically.
+
+## Suggestions
+- Check for overdue tasks.
+- Check recent tool failures.
+- Check external dependencies and alert only when action is needed.
+
+## Output rule
+If everything is healthy, reply with HEARTBEAT_OK only.
+`;
 
 const parseActiveHours = (value: string): ActiveHoursWindow | null => {
   if (!value.trim()) {
@@ -68,12 +86,7 @@ const isInActiveWindow = (window: ActiveHoursWindow | null, at: Date) => {
   return nowMinutes >= window.startMinutes || nowMinutes < window.endMinutes;
 };
 
-export type HeartbeatRequest = {
-  reason?: string;
-  force?: boolean;
-  channel?: string;
-  chatId?: string;
-};
+export type HeartbeatRequest = HeartbeatWakeEvent;
 
 export type HeartbeatStatus = {
   running: boolean;
@@ -107,8 +120,9 @@ export type HeartbeatController = {
 };
 
 export class HeartbeatService implements HeartbeatController {
-  private timer: NodeJS.Timeout | null = null;
   private wakeTimer: NodeJS.Timeout | null = null;
+  private eventSources: HeartbeatEventSource[] = [];
+  private eventStops = new Map<string, () => void>();
   private retryTimer: NodeJS.Timeout | null = null;
   private running = false;
   private enabled: boolean;
@@ -127,6 +141,15 @@ export class HeartbeatService implements HeartbeatController {
   ) {
     this.enabled = this.config.heartbeat.enabled;
     this.activeHoursWindow = parseActiveHours(this.config.heartbeat.activeHours);
+    this.registerEventSource(createIntervalHeartbeatSource(this.config.heartbeat.intervalMs));
+  }
+
+  registerEventSource(source: HeartbeatEventSource) {
+    this.eventSources = this.eventSources.filter((entry) => entry.name !== source.name);
+    this.eventSources.push(source);
+    if (this.running) {
+      this.startEventSource(source);
+    }
   }
 
   start() {
@@ -134,19 +157,14 @@ export class HeartbeatService implements HeartbeatController {
       return;
     }
     this.running = true;
-    this.timer = setInterval(() => {
-      this.requestNow({ reason: "heartbeat:tick" });
-    }, this.config.heartbeat.intervalMs);
-    this.timer.unref?.();
-    this.requestNow({ reason: "heartbeat:startup" });
+    for (const source of this.eventSources) {
+      this.startEventSource(source);
+    }
   }
 
   stop() {
     this.running = false;
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
+    this.stopEventSources();
     if (this.wakeTimer) {
       clearTimeout(this.wakeTimer);
       this.wakeTimer = null;
@@ -193,6 +211,34 @@ export class HeartbeatService implements HeartbeatController {
     if (enabled) {
       this.requestNow({ reason: `heartbeat:enabled:${reason}`, force: true });
     }
+  }
+
+  private startEventSource(source: HeartbeatEventSource) {
+    if (this.eventStops.has(source.name)) {
+      return;
+    }
+    try {
+      const cleanup = source.start((event) => this.requestNow(event));
+      this.eventStops.set(
+        source.name,
+        typeof cleanup === "function" ? cleanup : () => undefined
+      );
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.logger.warn({ source: source.name, error: detail }, "heartbeat event source failed to start");
+    }
+  }
+
+  private stopEventSources() {
+    for (const [name, stop] of this.eventStops.entries()) {
+      try {
+        stop();
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        this.logger.warn({ source: name, error: detail }, "heartbeat event source failed to stop");
+      }
+    }
+    this.eventStops.clear();
   }
 
   getStatus(): HeartbeatStatus {
@@ -438,6 +484,7 @@ export class HeartbeatService implements HeartbeatController {
   private readPrompt(): { text: string; hash: string } | null {
     const promptPath = path.resolve(this.config.workspaceDir, this.config.heartbeat.promptPath);
     if (!fs.existsSync(promptPath)) {
+      this.ensurePromptTemplate(promptPath);
       return null;
     }
     const text = fs.readFileSync(promptPath, "utf-8").trim();
@@ -448,6 +495,20 @@ export class HeartbeatService implements HeartbeatController {
       text,
       hash: hashText(text)
     };
+  }
+
+  private ensurePromptTemplate(promptPath: string) {
+    try {
+      fs.mkdirSync(path.dirname(promptPath), { recursive: true });
+      fs.writeFileSync(promptPath, DEFAULT_HEARTBEAT_TEMPLATE, { flag: "wx" });
+      this.logger.info({ promptPath }, "created default heartbeat prompt template");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        return;
+      }
+      const detail = error instanceof Error ? error.message : String(error);
+      this.logger.warn({ promptPath, error: detail }, "failed to create heartbeat prompt template");
+    }
   }
 
   private writeControlAudit(enabled: boolean, reason: string) {
