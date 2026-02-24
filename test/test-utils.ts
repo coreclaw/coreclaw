@@ -140,7 +140,10 @@ export const createConfig = (
       port: 8788,
       path: "/webhook",
       authToken: undefined,
-      maxBodyBytes: 1_000_000
+      maxBodyBytes: 1_000_000,
+      outboxMaxPerChat: 500,
+      outboxMaxChats: 2_000,
+      outboxChatTtlMs: 86_400_000
     },
     cli: { enabled: false }
   };

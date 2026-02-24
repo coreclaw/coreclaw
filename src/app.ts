@@ -46,6 +46,26 @@ const formatMcpResult = (result: unknown): string => {
   return JSON.stringify(result, null, 2);
 };
 
+const withTimeout = async <T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string
+): Promise<T> => {
+  let timer: NodeJS.Timeout | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+};
+
 export type CreateCorebotAppOptions = {
   config?: Config;
   logger?: Logger;
@@ -190,6 +210,10 @@ export const createCorebotApp = async (
   options: CreateCorebotAppOptions = {}
 ): Promise<CorebotApp> => {
   const config = options.config ?? loadConfig();
+  const mcpToolCallTimeoutMs = Math.max(
+    5_000,
+    Math.min(config.provider.timeoutMs, config.bus.processingTimeoutMs)
+  );
   ensureDir(config.dataDir);
   ensureDir(path.dirname(config.sqlitePath));
   ensureDir(config.workspaceDir);
@@ -362,7 +386,11 @@ export const createCorebotApp = async (
           "mcp__",
           defs,
           (def) => async (args: unknown, ctx: ToolContext) => {
-            const result = await ctx.mcp.callTool(def.name, args);
+            const result = await withTimeout(
+              ctx.mcp.callTool(def.name, args),
+              mcpToolCallTimeoutMs,
+              "MCP tool call timed out after " + mcpToolCallTimeoutMs + "ms"
+            );
             return formatMcpResult(result);
           }
         );

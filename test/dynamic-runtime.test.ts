@@ -306,3 +306,55 @@ test("ConversationRouter continues when MCP auto-sync fails", async () => {
     fixture.cleanup();
   }
 });
+
+test("ConversationRouter bounds per-chat serial queues and evicts idle entries", async () => {
+  const fixture = createStorageFixture();
+  const logger = createNoopLogger();
+  const mcp = new McpManager({ logger });
+  const isolatedRuntime = new IsolatedToolRuntime(fixture.config, logger);
+  const registry = new ToolRegistry();
+  const provider = new MockProvider(async () => ({ content: "ok" }));
+  const runtime = new AgentRuntime(provider, registry, fixture.config, logger);
+  const contextBuilder = new ContextBuilder(fixture.storage, fixture.config, fixture.workspaceDir);
+  const bus = new MessageBus(fixture.storage, fixture.config, logger);
+  const router = new ConversationRouter(
+    fixture.storage,
+    contextBuilder,
+    runtime,
+    mcp,
+    bus,
+    logger,
+    fixture.config,
+    [],
+    isolatedRuntime,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {
+      maxQueues: 3,
+      idleTtlMs: 60_000,
+      pruneIntervalMs: 1_000
+    }
+  );
+
+  try {
+    for (let i = 0; i < 8; i += 1) {
+      await router.handleInbound({
+        id: `queue-prune-${i}`,
+        channel: "cli",
+        chatId: `chat-${i}`,
+        senderId: "user",
+        content: "hello",
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    const queueSize = (router as unknown as { queues: Map<string, unknown> }).queues.size;
+    assert.ok(queueSize <= 3);
+  } finally {
+    await isolatedRuntime.shutdown();
+    await mcp.shutdown();
+    fixture.cleanup();
+  }
+});

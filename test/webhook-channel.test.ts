@@ -250,3 +250,91 @@ test("WebhookChannel enforces configured channel identity allowlist", async () =
     fixture.cleanup();
   }
 });
+
+test("WebhookChannel evicts least-recent chats when outbox chat cap is exceeded", async () => {
+  const fixture = createStorageFixture({
+    webhook: {
+      enabled: true,
+      host: "127.0.0.1",
+      port: await getFreePort(),
+      path: "/queue-cap",
+      authToken: undefined,
+      outboxMaxPerChat: 10,
+      outboxMaxChats: 2,
+      outboxChatTtlMs: 60_000
+    }
+  });
+
+  const bus = new MessageBus(fixture.storage, fixture.config, logger);
+  const channel = new WebhookChannel(fixture.config);
+
+  try {
+    await channel.start(bus, logger);
+    const base = `http://${fixture.config.webhook.host}:${fixture.config.webhook.port}${fixture.config.webhook.path}/outbound`;
+
+    await channel.send({ chatId: "chat-a", content: "a" });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await channel.send({ chatId: "chat-b", content: "b" });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await channel.send({ chatId: "chat-c", content: "c" });
+
+    const pullA = await fetch(`${base}?chatId=chat-a&limit=10`);
+    const bodyA = (await pullA.json()) as {
+      messages: Array<{ content: string }>;
+    };
+    assert.equal(bodyA.messages.length, 0);
+
+    const pullB = await fetch(`${base}?chatId=chat-b&limit=10`);
+    const bodyB = (await pullB.json()) as {
+      messages: Array<{ content: string }>;
+    };
+    assert.equal(bodyB.messages.length, 1);
+    assert.equal(bodyB.messages[0]?.content, "b");
+
+    const pullC = await fetch(`${base}?chatId=chat-c&limit=10`);
+    const bodyC = (await pullC.json()) as {
+      messages: Array<{ content: string }>;
+    };
+    assert.equal(bodyC.messages.length, 1);
+    assert.equal(bodyC.messages[0]?.content, "c");
+  } finally {
+    await channel.stop();
+    fixture.cleanup();
+  }
+});
+
+test("WebhookChannel expires inactive outbox chats by TTL", async () => {
+  const fixture = createStorageFixture({
+    webhook: {
+      enabled: true,
+      host: "127.0.0.1",
+      port: await getFreePort(),
+      path: "/queue-ttl",
+      authToken: undefined,
+      outboxMaxPerChat: 10,
+      outboxMaxChats: 10,
+      outboxChatTtlMs: 30
+    }
+  });
+
+  const bus = new MessageBus(fixture.storage, fixture.config, logger);
+  const channel = new WebhookChannel(fixture.config);
+
+  try {
+    await channel.start(bus, logger);
+    await channel.send({ chatId: "chat-ttl", content: "hello" });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    const res = await fetch(
+      `http://${fixture.config.webhook.host}:${fixture.config.webhook.port}${fixture.config.webhook.path}/outbound?chatId=chat-ttl&limit=10`
+    );
+    const body = (await res.json()) as {
+      messages: Array<{ content: string }>;
+    };
+
+    assert.equal(body.messages.length, 0);
+  } finally {
+    await channel.stop();
+    fixture.cleanup();
+  }
+});

@@ -114,9 +114,18 @@ export class Scheduler {
       const dispatched = this.storage.dispatchScheduledTasks({
         dueBefore,
         maxAttempts: this.config.bus.maxAttempts,
+        maxPendingInbound: this.config.bus.maxPendingInbound,
+        overloadPendingThreshold: this.config.bus.overloadPendingThreshold,
+        overloadBackoffMs: this.config.bus.overloadBackoffMs,
         items: plans
       });
       if (dispatched.dispatched === 0) {
+        if (dispatched.skippedFlowControl > 0) {
+          this.logger.warn(
+            { skippedFlowControl: dispatched.skippedFlowControl },
+            "scheduler tick skipped due to inbound flow control"
+          );
+        }
         return;
       }
 
@@ -134,7 +143,8 @@ export class Scheduler {
         {
           dueCount: due.length,
           plannedCount: plans.length,
-          dispatchedCount: dispatched.dispatched
+          dispatchedCount: dispatched.dispatched,
+          skippedFlowControl: dispatched.skippedFlowControl
         },
         "scheduler tick dispatched"
       );

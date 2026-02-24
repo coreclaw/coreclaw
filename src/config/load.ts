@@ -234,6 +234,15 @@ export const loadConfig = (): Config => {
       authToken: process.env.COREBOT_WEBHOOK_AUTH_TOKEN,
       maxBodyBytes: process.env.COREBOT_WEBHOOK_MAX_BODY_BYTES
         ? Number(process.env.COREBOT_WEBHOOK_MAX_BODY_BYTES)
+        : undefined,
+      outboxMaxPerChat: process.env.COREBOT_WEBHOOK_OUTBOX_MAX_PER_CHAT
+        ? Number(process.env.COREBOT_WEBHOOK_OUTBOX_MAX_PER_CHAT)
+        : undefined,
+      outboxMaxChats: process.env.COREBOT_WEBHOOK_OUTBOX_MAX_CHATS
+        ? Number(process.env.COREBOT_WEBHOOK_OUTBOX_MAX_CHATS)
+        : undefined,
+      outboxChatTtlMs: process.env.COREBOT_WEBHOOK_OUTBOX_CHAT_TTL_MS
+        ? Number(process.env.COREBOT_WEBHOOK_OUTBOX_CHAT_TTL_MS)
         : undefined
     },
     provider: {

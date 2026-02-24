@@ -14,6 +14,26 @@ const getAllowedEnv = (key: string, allowed: string[]) => {
   return undefined;
 };
 
+const withTimeout = async <T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string
+): Promise<T> => {
+  let timer: NodeJS.Timeout | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+};
+
 export const webTools = (): ToolSpec<any>[] => {
   const fetchTool: ToolSpec<any> = {
     name: "web.fetch",
@@ -58,27 +78,29 @@ export const webTools = (): ToolSpec<any>[] => {
       const abort = new AbortController();
       const timer = setTimeout(() => abort.abort(), timeoutMs);
 
-      const response = await fetch(url.toString(), {
-        method: args.method,
-        headers: args.headers,
-        body: args.method === "POST" ? args.body : undefined,
-        signal: abort.signal,
-        redirect: "error"
-      }).finally(() => {
-        clearTimeout(timer);
-      });
+      try {
+        const response = await fetch(url.toString(), {
+          method: args.method,
+          headers: args.headers,
+          body: args.method === "POST" ? args.body : undefined,
+          signal: abort.signal,
+          redirect: "error"
+        });
 
-      const { body, truncated } = await readBodyWithLimit(response, maxResponseChars);
-      return JSON.stringify(
-        {
-          status: response.status,
-          headers: Object.fromEntries(response.headers.entries()),
-          body,
-          truncated
-        },
-        null,
-        2
-      );
+        const { body, truncated } = await readBodyWithLimit(response, maxResponseChars);
+        return JSON.stringify(
+          {
+            status: response.status,
+            headers: Object.fromEntries(response.headers.entries()),
+            body,
+            truncated
+          },
+          null,
+          2
+        );
+      } finally {
+        clearTimeout(timer);
+      }
     }
   };
 
@@ -97,17 +119,42 @@ export const webTools = (): ToolSpec<any>[] => {
       const url = new URL("https://api.search.brave.com/res/v1/web/search");
       url.searchParams.set("q", args.query);
       url.searchParams.set("count", String(args.count));
-      const response = await fetch(url.toString(), {
-        headers: {
-          Accept: "application/json",
-          "X-Subscription-Token": apiKey
+
+      const timeoutMs = DEFAULT_WEB_FETCH_TIMEOUT_MS;
+      const abort = new AbortController();
+      const timer = setTimeout(() => abort.abort(), timeoutMs);
+      let response: Response;
+      try {
+        response = await fetch(url.toString(), {
+          headers: {
+            Accept: "application/json",
+            "X-Subscription-Token": apiKey
+          },
+          signal: abort.signal
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          throw new Error(`Brave search timed out after ${timeoutMs}ms`);
         }
-      });
+        throw error;
+      } finally {
+        clearTimeout(timer);
+      }
+
       if (!response.ok) {
-        const body = await response.text();
+        const body = await withTimeout(
+          response.text(),
+          timeoutMs,
+          `Brave search response read timed out after ${timeoutMs}ms`
+        );
         throw new Error(`Brave search failed: ${response.status} ${body}`);
       }
-      const data = await response.json();
+
+      const data = await withTimeout(
+        response.json(),
+        timeoutMs,
+        `Brave search response parse timed out after ${timeoutMs}ms`
+      );
       return JSON.stringify(data, null, 2);
     }
   };

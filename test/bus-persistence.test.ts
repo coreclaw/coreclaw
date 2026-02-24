@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MessageBus } from "../src/bus/bus.js";
+import { BusDeferMessageError, MessageBus } from "../src/bus/bus.js";
 import { createStorageFixture } from "./test-utils.js";
 
 const waitUntil = async (
@@ -284,6 +284,49 @@ test("MessageBus times out stuck inbound handler and continues with next message
     assert.equal(counts.dead_letter, 1);
     const dead = fixture.storage.listDeadLetterBusMessages("inbound", 10);
     assert.match(dead[0]?.lastError ?? "", /timed out/i);
+  } finally {
+    bus.stop();
+    fixture.cleanup();
+  }
+});
+
+test("MessageBus defers in-progress inbound without consuming retry attempts", async () => {
+  const fixture = createStorageFixture({
+    bus: {
+      pollMs: 20,
+      batchSize: 10,
+      maxAttempts: 1,
+      retryBackoffMs: 10,
+      maxRetryBackoffMs: 100,
+      processingTimeoutMs: 500
+    }
+  });
+
+  const bus = new MessageBus(fixture.storage, fixture.config);
+  try {
+    let calls = 0;
+    bus.onInbound(async () => {
+      calls += 1;
+      if (calls < 3) {
+        throw new BusDeferMessageError("execution still in progress", 10);
+      }
+    });
+
+    bus.publishInbound({
+      id: "msg-defer-1",
+      channel: "cli",
+      chatId: "local",
+      senderId: "user",
+      content: "defer",
+      createdAt: new Date().toISOString()
+    });
+
+    bus.start();
+    await waitUntil(() => calls >= 3);
+
+    const counts = fixture.storage.countBusMessagesByStatus("inbound");
+    assert.equal(counts.processed, 1);
+    assert.equal(counts.dead_letter, 0);
   } finally {
     bus.stop();
     fixture.cleanup();

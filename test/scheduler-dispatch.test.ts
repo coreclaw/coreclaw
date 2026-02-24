@@ -107,11 +107,17 @@ test("dispatchScheduledTasks prevents duplicate enqueue for the same due run", (
     const first = fixture.storage.dispatchScheduledTasks({
       dueBefore,
       maxAttempts: fixture.config.bus.maxAttempts,
+      maxPendingInbound: fixture.config.bus.maxPendingInbound,
+      overloadPendingThreshold: fixture.config.bus.overloadPendingThreshold,
+      overloadBackoffMs: fixture.config.bus.overloadBackoffMs,
       items: plans
     });
     const second = fixture.storage.dispatchScheduledTasks({
       dueBefore,
       maxAttempts: fixture.config.bus.maxAttempts,
+      maxPendingInbound: fixture.config.bus.maxPendingInbound,
+      overloadPendingThreshold: fixture.config.bus.overloadPendingThreshold,
+      overloadBackoffMs: fixture.config.bus.overloadBackoffMs,
       items: plans
     });
 
@@ -124,6 +130,60 @@ test("dispatchScheduledTasks prevents duplicate enqueue for the same due run", (
     const updated = fixture.storage.getTask(task.id);
     assert.ok(updated?.nextRunAt);
     assert.notEqual(updated?.nextRunAt, task.nextRunAt);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+
+test("Scheduler leaves due tasks pending when inbound queue is at max capacity", async () => {
+  const fixture = createStorageFixture({
+    bus: {
+      maxPendingInbound: 1,
+      overloadPendingThreshold: 1,
+      overloadBackoffMs: 500
+    }
+  });
+  try {
+    const chat = fixture.storage.upsertChat({ channel: "cli", chatId: "local" });
+    const task = fixture.storage.createTask({
+      chatFk: chat.id,
+      prompt: "queue-constrained",
+      scheduleType: "once",
+      scheduleValue: new Date(Date.now() - 1_000).toISOString(),
+      contextMode: "group",
+      nextRunAt: new Date(Date.now() - 1_000).toISOString()
+    });
+
+    fixture.storage.enqueueBusMessage({
+      direction: "inbound",
+      payload: {
+        id: "existing-pending",
+        channel: "cli",
+        chatId: "local",
+        senderId: "user",
+        content: "already queued",
+        createdAt: new Date().toISOString()
+      },
+      maxAttempts: fixture.config.bus.maxAttempts
+    });
+
+    const bus = new MessageBus(fixture.storage, fixture.config, createNoopLogger());
+    const scheduler = new Scheduler(
+      fixture.storage,
+      bus,
+      createNoopLogger(),
+      fixture.config
+    );
+
+    await (scheduler as any).tick();
+
+    const counts = fixture.storage.countBusMessagesByStatus("inbound");
+    assert.equal(counts.pending, 1);
+
+    const updated = fixture.storage.getTask(task.id);
+    assert.equal(updated?.status, "active");
+    assert.equal(updated?.nextRunAt, task.nextRunAt);
   } finally {
     fixture.cleanup();
   }

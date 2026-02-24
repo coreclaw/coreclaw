@@ -70,6 +70,23 @@ test("RuntimeTelemetry aggregates tool and scheduler metrics", () => {
   assert.equal(snapshot.heartbeat.totals.calls, 0);
 });
 
+test("RuntimeTelemetry caps MCP reload reason cardinality", () => {
+  const telemetry = new RuntimeTelemetry();
+  for (let i = 0; i < 250; i += 1) {
+    telemetry.recordMcpReload({
+      reason: "reason-" + i,
+      durationMs: 1,
+      outcome: "skipped"
+    });
+  }
+
+  const snapshot = telemetry.snapshot();
+  assert.equal(snapshot.mcpReload.totals.calls, 250);
+  assert.equal(snapshot.mcpReload.byReason.length, 201);
+  const other = snapshot.mcpReload.byReason.find((entry) => entry.reason === "__other__");
+  assert.equal(other?.calls, 50);
+});
+
 test("Scheduler reports task delay telemetry", async () => {
   const fixture = createStorageFixture({
     scheduler: { tickMs: 20 }

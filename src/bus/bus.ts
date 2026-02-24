@@ -9,6 +9,16 @@ export type InboundHandler = (message: InboundMessage) => Promise<void>;
 export type OutboundHandler = (message: OutboundMessage) => Promise<void>;
 type BusLogger = Pick<Logger, "error" | "warn" | "info" | "debug">;
 
+export class BusDeferMessageError extends Error {
+  readonly delayMs: number;
+
+  constructor(message = "Message processing deferred", delayMs = 1_000) {
+    super(message);
+    this.name = "BusDeferMessageError";
+    this.delayMs = Math.max(1, Math.floor(delayMs));
+  }
+}
+
 const withTimeout = async <T>(
   promise: Promise<T>,
   timeoutMs: number,
@@ -259,6 +269,10 @@ export class MessageBus {
         this.storage.markBusMessageProcessed(record.id, nowIso());
         processed += 1;
       } catch (error) {
+        if (error instanceof BusDeferMessageError) {
+          this.deferBusMessage(record, error);
+          continue;
+        }
         const message = error instanceof Error ? error.message : String(error);
         this.handleProcessingError(record, message);
       }
@@ -321,6 +335,28 @@ export class MessageBus {
         error
       },
       "bus message scheduled for retry"
+    );
+  }
+
+  private deferBusMessage(record: BusQueueRecord, error: BusDeferMessageError) {
+    const now = nowIso();
+    const delayMs = Math.max(1, error.delayMs);
+    const availableAt = new Date(new Date(now).getTime() + delayMs).toISOString();
+    this.storage.markBusMessageDeferred({
+      id: record.id,
+      availableAt,
+      updatedAt: now,
+      reason: error.message
+    });
+    this.logger?.debug(
+      {
+        queueId: record.id,
+        direction: record.direction,
+        attempts: record.attempts,
+        deferredUntil: availableAt,
+        reason: error.message
+      },
+      "bus message deferred"
     );
   }
 

@@ -353,6 +353,25 @@ export class SqliteStorage {
       );
   }
 
+  touchInboundExecution(params: {
+    channel: string;
+    chatId: string;
+    inboundId: string;
+    updatedAt: string;
+  }): boolean {
+    const result = this.db
+      .prepare(
+        "UPDATE inbound_executions SET updated_at = ? WHERE channel = ? AND chat_id = ? AND inbound_id = ? AND status = 'running'"
+      )
+      .run(
+        params.updatedAt,
+        params.channel,
+        params.chatId,
+        params.inboundId
+      );
+    return result.changes > 0;
+  }
+
   listDueBusMessages(
     direction: BusMessageDirection,
     now: string,
@@ -423,6 +442,24 @@ export class SqliteStorage {
         "UPDATE message_queue SET status = 'pending', attempts = ?, available_at = ?, last_error = ?, updated_at = ?, claimed_at = NULL WHERE id = ?"
       )
       .run(params.attempts, params.availableAt, params.error, params.updatedAt, params.id);
+  }
+
+  markBusMessageDeferred(params: {
+    id: string;
+    availableAt: string;
+    updatedAt: string;
+    reason?: string;
+  }) {
+    this.db
+      .prepare(
+        "UPDATE message_queue SET status = 'pending', available_at = ?, last_error = ?, updated_at = ?, claimed_at = NULL WHERE id = ? AND status = 'processing'"
+      )
+      .run(
+        params.availableAt,
+        params.reason ?? "Deferred for later retry.",
+        params.updatedAt,
+        params.id
+      );
   }
 
   markBusMessageDeadLetter(params: {
@@ -1121,25 +1158,44 @@ export class SqliteStorage {
   dispatchScheduledTasks(params: {
     dueBefore: string;
     maxAttempts: number;
+    maxPendingInbound: number;
+    overloadPendingThreshold: number;
+    overloadBackoffMs: number;
     items: Array<{
       taskId: string;
       nextRunAt: string | null;
       status: TaskRecord["status"];
       inbound: InboundMessage;
     }>;
-  }): { dispatched: number; taskIds: string[] } {
+  }): { dispatched: number; taskIds: string[]; skippedFlowControl: number } {
     const now = nowIso();
 
     const run = this.db.transaction(() => {
       const taskIds: string[] = [];
+      let skippedFlowControl = 0;
       const updateTask = this.db.prepare(
         "UPDATE tasks SET status = ?, next_run_at = ? WHERE id = ? AND status = 'active' AND next_run_at IS NOT NULL AND next_run_at <= ?"
       );
       const insertQueue = this.db.prepare(
         "INSERT INTO message_queue(id, direction, payload, status, attempts, max_attempts, available_at, created_at, updated_at, claimed_at, processed_at, dead_lettered_at, last_error) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"
       );
+      const countInboundQueued = this.db.prepare(
+        "SELECT COUNT(*) as count FROM message_queue WHERE direction = 'inbound' AND status IN ('pending', 'processing')"
+      );
 
       for (const item of params.items) {
+        const queued = countInboundQueued.get() as { count: number } | undefined;
+        const queuedTotal = queued?.count ?? 0;
+        if (queuedTotal >= params.maxPendingInbound) {
+          skippedFlowControl += 1;
+          continue;
+        }
+
+        const availableAt =
+          queuedTotal >= params.overloadPendingThreshold
+            ? new Date(Date.now() + params.overloadBackoffMs).toISOString()
+            : now;
+
         const updated = updateTask.run(
           item.status,
           item.nextRunAt,
@@ -1157,7 +1213,7 @@ export class SqliteStorage {
           "pending",
           0,
           params.maxAttempts,
-          now,
+          availableAt,
           now,
           now,
           null,
@@ -1170,7 +1226,8 @@ export class SqliteStorage {
 
       return {
         dispatched: taskIds.length,
-        taskIds
+        taskIds,
+        skippedFlowControl
       };
     });
 

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { SqliteStorage } from "../storage/sqlite.js";
 import type { ContextBuilder } from "../agent/context.js";
 import type { AgentRuntime } from "../agent/runtime.js";
-import type { MessageBus } from "./bus.js";
+import { BusDeferMessageError, type MessageBus } from "./bus.js";
 import type { Config } from "../config/schema.js";
 import type { Logger } from "pino";
 import type { SkillIndexEntry } from "../skills/types.js";
@@ -22,14 +22,29 @@ import type { HeartbeatController } from "../heartbeat/service.js";
 
 class SerialQueue {
   private tail = Promise.resolve();
+  private pending = 0;
+  private lastActiveAtMs = Date.now();
 
   enqueue<T>(task: () => Promise<T>): Promise<T> {
+    this.pending += 1;
+    this.lastActiveAtMs = Date.now();
     const run = this.tail.then(task, task);
     this.tail = run.then(
       () => undefined,
       () => undefined
     );
-    return run;
+    return run.finally(() => {
+      this.pending = Math.max(0, this.pending - 1);
+      this.lastActiveAtMs = Date.now();
+    });
+  }
+
+  isIdle(): boolean {
+    return this.pending === 0;
+  }
+
+  lastActiveAtMsValue(): number {
+    return this.lastActiveAtMs;
   }
 }
 
@@ -44,8 +59,22 @@ const hashHeartbeatContent = (value: string) =>
 const escapeRegex = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+type RouterQueueOptions = {
+  maxQueues: number;
+  idleTtlMs: number;
+  pruneIntervalMs: number;
+};
+
+const DEFAULT_ROUTER_QUEUE_OPTIONS: RouterQueueOptions = {
+  maxQueues: 5_000,
+  idleTtlMs: 30 * 60_000,
+  pruneIntervalMs: 30_000
+};
+
 export class ConversationRouter {
   private queues = new Map<string, SerialQueue>();
+  private queueOptions: RouterQueueOptions;
+  private queueLastPruneAtMs = 0;
 
   constructor(
     private storage: SqliteStorage,
@@ -60,15 +89,74 @@ export class ConversationRouter {
     private mcpReloader?: (params?: McpReloadRequest) => Promise<McpReloadResult>,
     private heartbeatController?: HeartbeatController,
     private wakeHeartbeat?: (reason: string) => void,
-    private telemetry?: RuntimeTelemetry
-  ) {}
+    private telemetry?: RuntimeTelemetry,
+    queueOptions?: Partial<RouterQueueOptions>
+  ) {
+    const merged: RouterQueueOptions = {
+      ...DEFAULT_ROUTER_QUEUE_OPTIONS,
+      ...queueOptions
+    };
+    const defaultMaxQueues = Math.max(
+      DEFAULT_ROUTER_QUEUE_OPTIONS.maxQueues,
+      this.config.bus.maxPendingInbound * 2
+    );
+    const configuredMaxQueues =
+      queueOptions?.maxQueues === undefined
+        ? defaultMaxQueues
+        : Math.floor(queueOptions.maxQueues);
+
+    this.queueOptions = {
+      maxQueues: Math.max(1, configuredMaxQueues),
+      idleTtlMs: Math.max(1_000, Math.floor(merged.idleTtlMs)),
+      pruneIntervalMs: Math.max(500, Math.floor(merged.pruneIntervalMs))
+    };
+  }
 
   handleInbound = async (message: InboundMessage) => {
     const key = `${message.channel}:${message.chatId}`;
     const queue = this.queues.get(key) ?? new SerialQueue();
     this.queues.set(key, queue);
-    await queue.enqueue(() => this.processMessage(message));
+    const processing = queue.enqueue(() => this.processMessage(message));
+    this.pruneQueues(key);
+    try {
+      await processing;
+    } finally {
+      this.pruneQueues(key);
+    }
   };
+
+  private pruneQueues(activeKey?: string) {
+    const nowMs = Date.now();
+    const overCapacity = this.queues.size > this.queueOptions.maxQueues;
+    if (!overCapacity && nowMs - this.queueLastPruneAtMs < this.queueOptions.pruneIntervalMs) {
+      return;
+    }
+    this.queueLastPruneAtMs = nowMs;
+
+    for (const [key, queue] of this.queues.entries()) {
+      if (key === activeKey || !queue.isIdle()) {
+        continue;
+      }
+      if (nowMs - queue.lastActiveAtMsValue() > this.queueOptions.idleTtlMs) {
+        this.queues.delete(key);
+      }
+    }
+
+    if (this.queues.size <= this.queueOptions.maxQueues) {
+      return;
+    }
+
+    const idleCandidates = [...this.queues.entries()]
+      .filter(([key, queue]) => key !== activeKey && queue.isIdle())
+      .sort((a, b) => a[1].lastActiveAtMsValue() - b[1].lastActiveAtMsValue());
+
+    for (const [key] of idleCandidates) {
+      if (this.queues.size <= this.queueOptions.maxQueues) {
+        break;
+      }
+      this.queues.delete(key);
+    }
+  }
 
   private async processMessage(message: InboundMessage) {
     const chat = this.storage.upsertChat({
@@ -116,7 +204,10 @@ export class ConversationRouter {
         },
         "inbound execution already in progress"
       );
-      return;
+      throw new BusDeferMessageError(
+        "Inbound execution is still running",
+        this.config.bus.retryBackoffMs
+      );
     }
 
     const { messages } = this.contextBuilder.build({
@@ -152,6 +243,24 @@ export class ConversationRouter {
         toolMessages = [];
       }
     } else {
+      const leaseIntervalMs = Math.max(
+        250,
+        Math.floor(this.config.bus.processingTimeoutMs / 3)
+      );
+      const leaseTimer = setInterval(() => {
+        try {
+          this.storage.touchInboundExecution({
+            channel: message.channel,
+            chatId: message.chatId,
+            inboundId: message.id,
+            updatedAt: nowIso()
+          });
+        } catch {
+          // keepalive is best-effort and should not fail message processing.
+        }
+      }, leaseIntervalMs);
+      leaseTimer.unref?.();
+
       try {
         const result = await this.runtime.run({
           messages,
@@ -163,6 +272,8 @@ export class ConversationRouter {
         errorMessage = error instanceof Error ? error.message : String(error);
         responseContent = `Error: ${errorMessage}`;
         this.logger.error({ error: errorMessage }, "runtime error");
+      } finally {
+        clearInterval(leaseTimer);
       }
       this.storage.completeInboundExecution({
         channel: message.channel,

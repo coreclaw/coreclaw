@@ -145,6 +145,9 @@ export class HeartbeatService implements HeartbeatController {
   }
 
   registerEventSource(source: HeartbeatEventSource) {
+    if (this.eventStops.has(source.name)) {
+      this.stopEventSource(source.name);
+    }
     this.eventSources = this.eventSources.filter((entry) => entry.name !== source.name);
     this.eventSources.push(source);
     if (this.running) {
@@ -229,16 +232,24 @@ export class HeartbeatService implements HeartbeatController {
     }
   }
 
-  private stopEventSources() {
-    for (const [name, stop] of this.eventStops.entries()) {
-      try {
-        stop();
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        this.logger.warn({ source: name, error: detail }, "heartbeat event source failed to stop");
-      }
+  private stopEventSource(name: string) {
+    const stop = this.eventStops.get(name);
+    if (!stop) {
+      return;
     }
-    this.eventStops.clear();
+    this.eventStops.delete(name);
+    try {
+      stop();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.logger.warn({ source: name, error: detail }, "heartbeat event source failed to stop");
+    }
+  }
+
+  private stopEventSources() {
+    for (const name of [...this.eventStops.keys()]) {
+      this.stopEventSource(name);
+    }
   }
 
   getStatus(): HeartbeatStatus {

@@ -170,6 +170,76 @@ test("HeartbeatService supports custom wake event source plugins", async () => {
   }
 });
 
+test("HeartbeatService replaces running event source with same name", async () => {
+  const fixture = createStorageFixture({
+    heartbeat: {
+      enabled: true,
+      intervalMs: 60_000,
+      wakeDebounceMs: 20,
+      wakeRetryMs: 100,
+      promptPath: "HEARTBEAT.md",
+      maxDispatchPerRun: 10
+    }
+  });
+  const logger = createNoopLogger();
+  const bus = new MessageBus(fixture.storage, fixture.config, logger);
+  const heartbeat = new HeartbeatService(fixture.storage, bus, fixture.config, logger);
+  let firstStopped = false;
+
+  try {
+    fixture.storage.upsertChat({ channel: "cli", chatId: "alpha" });
+    fs.writeFileSync(path.join(fixture.workspaceDir, "HEARTBEAT.md"), "hb prompt");
+
+    heartbeat.registerEventSource({
+      name: "replaceable-source",
+      start(emit) {
+        const timer = setInterval(() => {
+          emit({ reason: "heartbeat:source:v1", force: true });
+        }, 25);
+        return () => {
+          firstStopped = true;
+          clearInterval(timer);
+        };
+      }
+    });
+
+    heartbeat.start();
+    await waitUntil(() => {
+      const payloads = listPendingInbound(fixture.storage).map((row) =>
+        JSON.parse(row.payload) as { metadata?: Record<string, unknown> }
+      );
+      return payloads.some((payload) =>
+        String(payload.metadata?.heartbeatReason ?? "").includes("heartbeat:source:v1")
+      );
+    });
+
+    heartbeat.registerEventSource({
+      name: "replaceable-source",
+      start(emit) {
+        const timer = setInterval(() => {
+          emit({ reason: "heartbeat:source:v2", force: true });
+        }, 25);
+        return () => {
+          clearInterval(timer);
+        };
+      }
+    });
+
+    await waitUntil(() => {
+      const payloads = listPendingInbound(fixture.storage).map((row) =>
+        JSON.parse(row.payload) as { metadata?: Record<string, unknown> }
+      );
+      return payloads.some((payload) =>
+        String(payload.metadata?.heartbeatReason ?? "").includes("heartbeat:source:v2")
+      );
+    });
+    assert.equal(firstStopped, true);
+  } finally {
+    heartbeat.stop();
+    fixture.cleanup();
+  }
+});
+
 test("HeartbeatService runtime enable switch gates dispatch", async () => {
   const fixture = createStorageFixture({
     heartbeat: {

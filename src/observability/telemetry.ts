@@ -54,6 +54,9 @@ const sanitizeReasonLabel = (reason: string) => {
   return raw.replace(/[^a-zA-Z0-9_.:-]/g, "_");
 };
 
+const MAX_MCP_RELOAD_REASON_CARDINALITY = 200;
+const MCP_RELOAD_OTHER_REASON = "__other__";
+
 export class RuntimeTelemetry {
   private toolMetrics = new Map<string, ToolMetric>();
   private schedulerMetric: SchedulerMetric = {
@@ -98,7 +101,12 @@ export class RuntimeTelemetry {
     durationMs: number;
     outcome: "reloaded" | "failed" | "skipped";
   }) {
-    const reasonLabel = sanitizeReasonLabel(params.reason);
+    const rawReasonLabel = sanitizeReasonLabel(params.reason);
+    const reasonLabel =
+      this.mcpReloadByReason.has(rawReasonLabel) ||
+      this.mcpReloadByReason.size < MAX_MCP_RELOAD_REASON_CARDINALITY
+        ? rawReasonLabel
+        : MCP_RELOAD_OTHER_REASON;
     const total = this.mcpReloadTotals;
     const byReason = this.mcpReloadByReason.get(reasonLabel) ?? createMcpReloadMetric();
 

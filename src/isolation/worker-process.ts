@@ -234,27 +234,29 @@ const executeWebFetch = async (
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), request.timeoutMs);
 
-  const response = await fetch(url.toString(), {
-    method: request.method,
-    headers: request.headers,
-    body: request.method === "POST" ? request.body : undefined,
-    signal: abort.signal,
-    redirect: "error"
-  }).finally(() => {
-    clearTimeout(timer);
-  });
+  try {
+    const response = await fetch(url.toString(), {
+      method: request.method,
+      headers: request.headers,
+      body: request.method === "POST" ? request.body : undefined,
+      signal: abort.signal,
+      redirect: "error"
+    });
 
-  const { body, truncated } = await readBodyWithLimit(response, request.maxResponseChars);
-  return JSON.stringify(
-    {
-      status: response.status,
-      headers: Object.fromEntries(response.headers.entries()),
-      body,
-      truncated
-    },
-    null,
-    2
-  );
+    const { body, truncated } = await readBodyWithLimit(response, request.maxResponseChars);
+    return JSON.stringify(
+      {
+        status: response.status,
+        headers: Object.fromEntries(response.headers.entries()),
+        body,
+        truncated
+      },
+      null,
+      2
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 };
 
 const executeFsWrite = async (

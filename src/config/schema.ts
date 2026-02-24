@@ -131,7 +131,10 @@ export const ConfigSchema = z.object({
       port: z.number().int().min(1).max(65535).default(8788),
       path: z.string().default("/webhook"),
       authToken: z.string().optional(),
-      maxBodyBytes: z.number().int().min(1_024).max(10_000_000).default(1_000_000)
+      maxBodyBytes: z.number().int().min(1_024).max(10_000_000).default(1_000_000),
+      outboxMaxPerChat: z.number().int().min(1).max(10_000).default(500),
+      outboxMaxChats: z.number().int().min(1).max(100_000).default(2_000),
+      outboxChatTtlMs: z.number().int().min(1_000).max(604_800_000).default(86_400_000)
     })
     .prefault({}),
   cli: z

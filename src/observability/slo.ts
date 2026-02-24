@@ -22,6 +22,8 @@ type TelemetrySnapshot = {
   };
 };
 
+const ALERT_WEBHOOK_TIMEOUT_MS = 5_000;
+
 export class SloMonitor {
   private readonly alertLastTs = new Map<string, number>();
 
@@ -142,8 +144,13 @@ export class SloMonitor {
       return;
     }
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort();
+    }, ALERT_WEBHOOK_TIMEOUT_MS);
+
     try {
-      await fetch(this.config.slo.alertWebhookUrl, {
+      const response = await fetch(this.config.slo.alertWebhookUrl, {
         method: "POST",
         headers: {
           "content-type": "application/json"
@@ -153,8 +160,12 @@ export class SloMonitor {
           message,
           details,
           at: new Date(now).toISOString()
-        })
+        }),
+        signal: controller.signal
       });
+      if (!response.ok) {
+        throw new Error(`alert webhook returned ${response.status}`);
+      }
     } catch {
       this.logger.warn(
         {
@@ -162,6 +173,8 @@ export class SloMonitor {
         },
         "failed to publish SLO alert webhook"
       );
+    } finally {
+      clearTimeout(timer);
     }
   }
 }
