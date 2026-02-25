@@ -1,8 +1,8 @@
 # Coreclaw
 
-![Node CI](https://github.com/webllm/coreclaw/workflows/Node%20CI/badge.svg)
-[![npm](https://img.shields.io/npm/v/@coreclaw/core.svg)](https://www.npmjs.com/package/@coreclaw/core)
-![license](https://img.shields.io/npm/l/@coreclaw/core)
+![Node CI](https://github.com/coreclaw/coreclaw/workflows/Node%20CI/badge.svg)
+[![npm](https://img.shields.io/npm/v/coreclaw.svg)](https://www.npmjs.com/package/coreclaw)
+![license](https://img.shields.io/npm/l/coreclaw)
 
 Lightweight but capable TypeScript bot architecture.
 Single-process by default, tool- and skill-driven, MCP-ready, and safe-by-default.

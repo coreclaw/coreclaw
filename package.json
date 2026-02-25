@@ -1,6 +1,6 @@
 {
   "name": "coreclaw",
-  "version": "0.3.0",
+  "version": "0.1.0",
   "description": "Lightweight but capable TypeScript bot architecture.",
   "type": "module",
   "packageManager": "pnpm@10.28.1",
@@ -32,7 +32,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/webllm/coreclaw.git"
+    "url": "git+https://github.com/coreclaw/coreclaw.git"
   },
   "scripts": {
     "dev": "tsx src/main.ts",
