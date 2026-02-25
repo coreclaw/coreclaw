@@ -1,5 +1,5 @@
 {
-  "name": "@coreclaw/core",
+  "name": "coreclaw",
   "version": "0.3.0",
   "description": "Lightweight but capable TypeScript bot architecture.",
   "type": "module",
