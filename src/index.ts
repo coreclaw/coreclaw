@@ -1,4 +1,4 @@
-export { createCorebotApp, CorebotApp, type CreateCorebotAppOptions } from "./app.js";
+export { createCoreclawApp, CoreclawApp, type CreateCoreclawAppOptions } from "./app.js";
 export { main } from "./main.js";
 export { runPreflightChecks, type PreflightOptions, type PreflightReport } from "./preflight.js";
 

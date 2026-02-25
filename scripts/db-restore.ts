@@ -28,7 +28,7 @@ const main = () => {
     throw new Error(`Backup file not found: ${source}`);
   }
 
-  const dbPath = path.resolve(parseArg("--db") ?? process.env.COREBOT_SQLITE_PATH ?? "data/bot.sqlite");
+  const dbPath = path.resolve(parseArg("--db") ?? process.env.CORECLAW_SQLITE_PATH ?? "data/bot.sqlite");
   const force = hasFlag("--force");
   if (!force) {
     throw new Error("Refusing restore without --force. Stop bot process, then retry with --force.");

@@ -164,7 +164,7 @@ test("McpManager exposes health snapshot with call stats", async () => {
     logger: { warn: () => undefined } as any
   });
 
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "corebot-mcp-health-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "coreclaw-mcp-health-"));
   try {
     const configPath = path.join(root, "mcp.json");
     fs.writeFileSync(
@@ -334,13 +334,13 @@ test("ObservabilityServer exposes health and metrics endpoints", async () => {
     const metrics = await fetch(`${base}/metrics`);
     assert.equal(metrics.status, 200);
     const text = await metrics.text();
-    assert.match(text, /corebot_health_ready 1/);
-    assert.match(text, /corebot_queue_pending\{direction="inbound"\} 1/);
-    assert.match(text, /corebot_mcp_calls_total\{server="remote"\} 5/);
-    assert.match(text, /corebot_mcp_reload_calls_total 4/);
-    assert.match(text, /corebot_mcp_reload_reason_calls_total\{reason="startup"\} 1/);
-    assert.match(text, /corebot_heartbeat_calls_total 3/);
-    assert.match(text, /corebot_heartbeat_scope_sent_total\{scope="delivery"\} 1/);
+    assert.match(text, /coreclaw_health_ready 1/);
+    assert.match(text, /coreclaw_queue_pending\{direction="inbound"\} 1/);
+    assert.match(text, /coreclaw_mcp_calls_total\{server="remote"\} 5/);
+    assert.match(text, /coreclaw_mcp_reload_calls_total 4/);
+    assert.match(text, /coreclaw_mcp_reload_reason_calls_total\{reason="startup"\} 1/);
+    assert.match(text, /coreclaw_heartbeat_calls_total 3/);
+    assert.match(text, /coreclaw_heartbeat_scope_sent_total\{scope="delivery"\} 1/);
 
     const status = await fetch(`${base}/status`);
     assert.equal(status.status, 200);

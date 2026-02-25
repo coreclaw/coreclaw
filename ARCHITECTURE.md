@@ -1,4 +1,4 @@
-# Corebot Architecture
+# Coreclaw Architecture
 
 > A lightweight yet capable TypeScript bot architecture, inspired by NanoClaw + NanoBot patterns.
 > Goals: **single-process**, **plug-in extensions (Tools/MCP/Skills)**, **multi-channel ready**, **safe-by-default**, and **evolvable**.
@@ -173,7 +173,7 @@ Unifies three tool sources:
 - Reload outcomes are observable via telemetry metrics and `audit_events`.
 
 ### 8.2 MCP Server (Future)
-> Not yet implemented. A future extension may expose Corebot's own capabilities
+> Not yet implemented. A future extension may expose Coreclaw's own capabilities
 > (message sending, scheduler, memory, admin ops) as an MCP server for external clients.
 
 ---
@@ -429,7 +429,7 @@ The `DefaultToolPolicyEngine` enforces the following rules:
 ## 13) Repo Layout
 
 ```
-corebot/
+coreclaw/
   package.json
   tsconfig.json
   Dockerfile
@@ -437,7 +437,7 @@ corebot/
   RUNBOOK.md
   src/
     main.ts              # Entry point, signal handling
-    app.ts               # CorebotApp class, lifecycle management
+    app.ts               # CoreclawApp class, lifecycle management
     bin.ts               # CLI handler (--help, --version)
     index.ts             # SDK exports
     types.ts             # Core type definitions
@@ -514,7 +514,7 @@ corebot/
     memory/
       MEMORY.md
     skills/
-      corebot-help/SKILL.md
+      coreclaw-help/SKILL.md
 ```
 
 ---
@@ -603,7 +603,7 @@ Key config areas: provider, bus (queue/retry/rate-limit), observability, SLO, is
 - Container sandbox for shell + tool execution
 - Additional LLM providers (Anthropic/OpenRouter)
 - WhatsApp and Telegram channel adapters
-- MCP server mode (expose Corebot capabilities to external clients)
+- MCP server mode (expose Coreclaw capabilities to external clients)
 - Multi-instance coordination and queue partitioning
 
 ---
@@ -616,7 +616,7 @@ export OPENAI_API_KEY=YOUR_KEY
 pnpm run dev
 ```
 
-Type into the CLI prompt to interact with Corebot.
+Type into the CLI prompt to interact with Coreclaw.
 
 ---
 

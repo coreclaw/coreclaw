@@ -8,7 +8,7 @@ import { SqliteStorage } from "../src/storage/sqlite.js";
 import { createConfig } from "./test-utils.js";
 
 test("db backup and restore scripts create snapshot and restore database", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "corebot-dbops-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "coreclaw-dbops-"));
   const workspaceDir = path.join(root, "workspace");
   const dataDir = path.join(root, "data");
   fs.mkdirSync(workspaceDir, { recursive: true });

@@ -7,7 +7,7 @@ import { runCli } from "../src/bin.js";
 import { runPreflightChecks } from "../src/preflight.js";
 
 test("runPreflightChecks validates explicit MCP config path", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "corebot-preflight-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "coreclaw-preflight-"));
   try {
     const mcpPath = path.join(root, "mcp.json");
     fs.writeFileSync(mcpPath, JSON.stringify({ servers: { demo: { command: "noop" } } }), "utf-8");
@@ -21,8 +21,8 @@ test("runPreflightChecks validates explicit MCP config path", () => {
   }
 });
 
-test("corebot preflight command accepts missing MCP config file", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "corebot-preflight-missing-"));
+test("coreclaw preflight command accepts missing MCP config file", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "coreclaw-preflight-missing-"));
   try {
     const mcpPath = path.join(root, "missing.json");
     await runCli(["preflight", "--mcp-config", mcpPath]);
@@ -31,8 +31,8 @@ test("corebot preflight command accepts missing MCP config file", async () => {
   }
 });
 
-test("corebot preflight command rejects invalid MCP config", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "corebot-preflight-invalid-"));
+test("coreclaw preflight command rejects invalid MCP config", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "coreclaw-preflight-invalid-"));
   try {
     const mcpPath = path.join(root, "mcp.json");
     fs.writeFileSync(

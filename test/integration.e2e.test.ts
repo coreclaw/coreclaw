@@ -180,15 +180,15 @@ test("E2E: inbound message routes through router and persists assistant reply", 
       channel: "cli",
       chatId: "local",
       senderId: "user",
-      content: "hello corebot",
+      content: "hello coreclaw",
       createdAt: new Date().toISOString()
     });
 
     await waitUntil(() => harness.outbound.length >= 1);
-    assert.equal(harness.outbound[0]?.content, "echo:hello corebot");
+    assert.equal(harness.outbound[0]?.content, "echo:hello coreclaw");
 
     const history = harness.storage.listRecentMessages(chat.id, 10);
-    assert.ok(history.some((item) => item.role === "assistant" && item.content === "echo:hello corebot"));
+    assert.ok(history.some((item) => item.role === "assistant" && item.content === "echo:hello coreclaw"));
   } finally {
     await harness.cleanup();
   }

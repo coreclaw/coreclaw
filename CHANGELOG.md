@@ -27,7 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - **Per-chat memory** files alongside global memory.
 - **Migration safety** with pre-migration backups and migration history.
 - **Database backup/restore** operational scripts.
-- **SDK exports** (`createCorebotApp`, `loadConfig`, core classes and types).
+- **SDK exports** (`createCoreclawApp`, `loadConfig`, core classes and types).
 - **Docker** multi-stage build.
 - **CI template** for GitHub Actions.
 - WhatsApp and Telegram channel stubs (not yet implemented).

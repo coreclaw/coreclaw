@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { createCorebotApp, main } from "../src/index.js";
+import { createCoreclawApp, main } from "../src/index.js";
 import { createStorageFixture } from "./test-utils.js";
 
 const logger = {
@@ -18,7 +18,7 @@ test("SDK entrypoint exports callable main function", () => {
   assert.equal(typeof main, "function");
 });
 
-test("createCorebotApp supports lifecycle start/stop for embedded usage", async () => {
+test("createCoreclawApp supports lifecycle start/stop for embedded usage", async () => {
   const fixture = createStorageFixture({
     cli: { enabled: false },
     webhook: { enabled: false },
@@ -28,7 +28,7 @@ test("createCorebotApp supports lifecycle start/stop for embedded usage", async 
     }
   });
 
-  const app = await createCorebotApp({
+  const app = await createCoreclawApp({
     config: fixture.config,
     logger
   });
@@ -60,7 +60,7 @@ test("mcp.reload records telemetry and audit metadata with reason", async () => 
   });
   fs.writeFileSync(fixture.config.mcpConfigPath, JSON.stringify({ servers: {} }), "utf-8");
 
-  const app = await createCorebotApp({
+  const app = await createCoreclawApp({
     config: fixture.config,
     logger
   });
@@ -142,7 +142,7 @@ test("mcp.reload non-force applies backoff and circuit after repeated failures",
   });
   fs.writeFileSync(fixture.config.mcpConfigPath, "{ bad json", "utf-8");
 
-  const app = await createCorebotApp({
+  const app = await createCoreclawApp({
     config: fixture.config,
     logger
   });

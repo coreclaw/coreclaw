@@ -40,7 +40,7 @@ test("McpManager enforces server and tool allowlists", async () => {
     } as any
   });
 
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "corebot-mcp-allow-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "coreclaw-mcp-allow-"));
   try {
     const configPath = path.join(root, "mcp.json");
     fs.writeFileSync(
@@ -95,7 +95,7 @@ test("McpManager reloadFromConfig replaces previously loaded tools", async () =>
     } as any
   });
 
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "corebot-mcp-reload-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "coreclaw-mcp-reload-"));
   try {
     const configPath = path.join(root, "mcp.json");
     fs.writeFileSync(
@@ -164,7 +164,7 @@ test("McpManager keeps last-known-good tools when config parse fails", async () 
     } as any
   });
 
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "corebot-mcp-rollback-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "coreclaw-mcp-rollback-"));
   try {
     const configPath = path.join(root, "mcp.json");
     fs.writeFileSync(
@@ -219,7 +219,7 @@ test("McpManager rejects invalid config schema and preserves last-known-good", a
     } as any
   });
 
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "corebot-mcp-schema-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "coreclaw-mcp-schema-"));
   try {
     const configPath = path.join(root, "mcp.json");
     fs.writeFileSync(
@@ -293,7 +293,7 @@ test("McpManager concurrent reload does not close active clients mid-call", asyn
     } as any
   });
 
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "corebot-mcp-concurrent-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "coreclaw-mcp-concurrent-"));
   try {
     const configPath = path.join(root, "mcp.json");
     fs.writeFileSync(

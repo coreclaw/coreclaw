@@ -1,5 +1,5 @@
 {
-  "name": "@corebot/core",
+  "name": "@coreclaw/core",
   "version": "0.3.0",
   "description": "Lightweight but capable TypeScript bot architecture.",
   "type": "module",
@@ -14,7 +14,7 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "corebot": "dist/bin.js"
+    "coreclaw": "dist/bin.js"
   },
   "files": [
     "dist",
@@ -32,7 +32,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/webllm/corebot.git"
+    "url": "git+https://github.com/webllm/coreclaw.git"
   },
   "scripts": {
     "dev": "tsx src/main.ts",

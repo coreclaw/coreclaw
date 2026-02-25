@@ -187,7 +187,7 @@ test("WebhookChannel enforces auth token when configured", async () => {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-corebot-token": "top-secret"
+        "x-coreclaw-token": "top-secret"
       },
       body: JSON.stringify({
         chatId: "c-ok",

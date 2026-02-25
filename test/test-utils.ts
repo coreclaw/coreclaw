@@ -171,7 +171,7 @@ export const createConfig = (
 };
 
 export const createStorageFixture = (overrides: TestConfigOverrides = {}) => {
-  const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), "corebot-test-"));
+  const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), "coreclaw-test-"));
   const workspaceDir = path.join(rootDir, "workspace");
   const dataDir = path.join(rootDir, "data");
   fs.mkdirSync(workspaceDir, { recursive: true });

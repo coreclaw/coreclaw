@@ -49,15 +49,15 @@ test("shell.exec enforces executable allowlist and avoids shell injection", asyn
 });
 
 test("shell.exec isolated runtime only exposes allowlisted env keys", async () => {
-  const previousAllowed = process.env.COREBOT_TEST_ALLOWED_ENV;
-  const previousBlocked = process.env.COREBOT_TEST_BLOCKED_ENV;
-  process.env.COREBOT_TEST_ALLOWED_ENV = "allowed";
-  process.env.COREBOT_TEST_BLOCKED_ENV = "blocked";
+  const previousAllowed = process.env.CORECLAW_TEST_ALLOWED_ENV;
+  const previousBlocked = process.env.CORECLAW_TEST_BLOCKED_ENV;
+  process.env.CORECLAW_TEST_ALLOWED_ENV = "allowed";
+  process.env.CORECLAW_TEST_BLOCKED_ENV = "blocked";
 
   const fixture = createStorageFixture({
     allowShell: true,
     allowedShellCommands: ["node"],
-    allowedEnv: ["COREBOT_TEST_ALLOWED_ENV"],
+    allowedEnv: ["CORECLAW_TEST_ALLOWED_ENV"],
     isolation: {
       enabled: true,
       toolNames: ["shell.exec"],
@@ -91,21 +91,21 @@ test("shell.exec isolated runtime only exposes allowlisted env keys", async () =
     const output = await tool.run(
       {
         command:
-          "node -e \"process.stdout.write((process.env.COREBOT_TEST_ALLOWED_ENV||'none') + ':' + (process.env.COREBOT_TEST_BLOCKED_ENV||'none'))\""
+          "node -e \"process.stdout.write((process.env.CORECLAW_TEST_ALLOWED_ENV||'none') + ':' + (process.env.CORECLAW_TEST_BLOCKED_ENV||'none'))\""
       },
       context
     );
     assert.equal(output, "allowed:none");
   } finally {
     if (previousAllowed === undefined) {
-      delete process.env.COREBOT_TEST_ALLOWED_ENV;
+      delete process.env.CORECLAW_TEST_ALLOWED_ENV;
     } else {
-      process.env.COREBOT_TEST_ALLOWED_ENV = previousAllowed;
+      process.env.CORECLAW_TEST_ALLOWED_ENV = previousAllowed;
     }
     if (previousBlocked === undefined) {
-      delete process.env.COREBOT_TEST_BLOCKED_ENV;
+      delete process.env.CORECLAW_TEST_BLOCKED_ENV;
     } else {
-      process.env.COREBOT_TEST_BLOCKED_ENV = previousBlocked;
+      process.env.CORECLAW_TEST_BLOCKED_ENV = previousBlocked;
     }
     await isolatedRuntime.shutdown();
     fixture.cleanup();

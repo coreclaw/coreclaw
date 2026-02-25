@@ -1,6 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createCorebotApp } from "./app.js";
+import { createCoreclawApp } from "./app.js";
 
 const isDirectExecution = () => {
   if (!process.argv[1]) {
@@ -14,7 +14,7 @@ const isDirectExecution = () => {
 };
 
 export const main = async () => {
-  const app = await createCorebotApp();
+  const app = await createCoreclawApp();
 
   const shutdown = async () => {
     await app.stop();

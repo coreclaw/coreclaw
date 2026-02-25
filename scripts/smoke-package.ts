@@ -46,7 +46,7 @@ const smokeCli = () => {
 
 const smokeSdk = async () => {
   const sdk = await import(pathToFileURL(path.resolve("dist/index.js")).href);
-  assert(typeof sdk.createCorebotApp === "function", "SDK export createCorebotApp is missing.");
+  assert(typeof sdk.createCoreclawApp === "function", "SDK export createCoreclawApp is missing.");
   assert(typeof sdk.main === "function", "SDK export main is missing.");
 };
 

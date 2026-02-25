@@ -1,11 +1,11 @@
 ---
-name: corebot-help
-description: "Explain Corebot's commands and capabilities."
+name: coreclaw-help
+description: "Explain Coreclaw's commands and capabilities."
 always: false
 ---
-# Corebot Help
+# Coreclaw Help
 
-Use this skill when the user asks how to use Corebot.
+Use this skill when the user asks how to use Coreclaw.
 
 ## Available Tools
 
@@ -19,7 +19,7 @@ Use this skill when the user asks how to use Corebot.
 
 ## CLI Commands
 
-- Type any message to chat with Corebot.
+- Type any message to chat with Coreclaw.
 - `/exit` — quit the CLI.
 - `/dlq list` — list dead-letter queue entries.
 - `/dlq replay <id|inbound|outbound|all>` — replay dead-letter entries.

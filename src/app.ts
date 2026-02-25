@@ -66,12 +66,12 @@ const withTimeout = async <T>(
   }
 };
 
-export type CreateCorebotAppOptions = {
+export type CreateCoreclawAppOptions = {
   config?: Config;
   logger?: Logger;
 };
 
-export class CorebotApp {
+export class CoreclawApp {
   private channels: Channel[] = [];
   private observabilityTimer: NodeJS.Timeout | null = null;
   private startupComplete = false;
@@ -206,9 +206,9 @@ export class CorebotApp {
   }
 }
 
-export const createCorebotApp = async (
-  options: CreateCorebotAppOptions = {}
-): Promise<CorebotApp> => {
+export const createCoreclawApp = async (
+  options: CreateCoreclawAppOptions = {}
+): Promise<CoreclawApp> => {
   const config = options.config ?? loadConfig();
   const mcpToolCallTimeoutMs = Math.max(
     5_000,
@@ -528,7 +528,7 @@ export const createCorebotApp = async (
     (reason) => heartbeatService.requestNow({ reason })
   );
 
-  return new CorebotApp(
+  return new CoreclawApp(
     config,
     logger,
     telemetry,

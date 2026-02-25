@@ -1,4 +1,4 @@
-# Contributing to Corebot
+# Contributing to Coreclaw
 
 ## Prerequisites
 
@@ -10,7 +10,7 @@
 ```bash
 # Clone and install
 git clone <repo-url>
-cd corebot
+cd coreclaw
 pnpm install --frozen-lockfile
 
 # Run in development mode

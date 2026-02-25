@@ -126,7 +126,7 @@ export class WebhookChannel implements Channel {
     }
     const header = req.headers.authorization;
     const bearer = header?.startsWith("Bearer ") ? header.slice(7) : undefined;
-    const token = bearer ?? (req.headers["x-corebot-token"] as string | undefined);
+    const token = bearer ?? (req.headers["x-coreclaw-token"] as string | undefined);
     return token === expected;
   }
 

@@ -17,7 +17,7 @@ const parseArg = (name: string): string | undefined => {
 const nowStamp = () => new Date().toISOString().replace(/[:.]/g, "-");
 
 const main = () => {
-  const dbPath = path.resolve(parseArg("--db") ?? process.env.COREBOT_SQLITE_PATH ?? "data/bot.sqlite");
+  const dbPath = path.resolve(parseArg("--db") ?? process.env.CORECLAW_SQLITE_PATH ?? "data/bot.sqlite");
   if (!fs.existsSync(dbPath)) {
     throw new Error(`SQLite file not found: ${dbPath}`);
   }

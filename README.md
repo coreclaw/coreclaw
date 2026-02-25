@@ -1,15 +1,15 @@
-# Corebot
+# Coreclaw
 
-![Node CI](https://github.com/webllm/corebot/workflows/Node%20CI/badge.svg)
-[![npm](https://img.shields.io/npm/v/@corebot/core.svg)](https://www.npmjs.com/package/@corebot/core)
-![license](https://img.shields.io/npm/l/@corebot/core)
+![Node CI](https://github.com/webllm/coreclaw/workflows/Node%20CI/badge.svg)
+[![npm](https://img.shields.io/npm/v/@coreclaw/core.svg)](https://www.npmjs.com/package/@coreclaw/core)
+![license](https://img.shields.io/npm/l/@coreclaw/core)
 
 Lightweight but capable TypeScript bot architecture.
 Single-process by default, tool- and skill-driven, MCP-ready, and safe-by-default.
 
 ## Reliability Positioning
 
-Corebot is optimized for the **single-host reliable AI bot** track:
+Coreclaw is optimized for the **single-host reliable AI bot** track:
 
 - one process, one local SQLite, one workspace
 - durable queue + retries + dead-letter replay
@@ -32,12 +32,12 @@ If your target is: "a bot that keeps running correctly on one machine under real
 
 Notes:
 
-- "Effectively-once" here means duplicate deliveries are neutralized by idempotency guards inside Corebot; external side effects still need idempotent tool design.
+- "Effectively-once" here means duplicate deliveries are neutralized by idempotency guards inside Coreclaw; external side effects still need idempotent tool design.
 - Queue dead-letter is an explicit stop condition, not silent drop.
 
 ## Failure Model and Recovery
 
-Corebot handles the following failure classes by default:
+Coreclaw handles the following failure classes by default:
 
 1. **Process crash during message handling**
    Result: stale `processing` messages are recovered on restart and re-queued.
@@ -79,7 +79,7 @@ Also recommended:
 
 - persist both `data/` and `workspace/`
 - enable webhook auth if webhook channel is exposed
-- set `COREBOT_MCP_ALLOWED_SERVERS` / `COREBOT_MCP_ALLOWED_TOOLS` in production
+- set `CORECLAW_MCP_ALLOWED_SERVERS` / `CORECLAW_MCP_ALLOWED_TOOLS` in production
 
 ## Features
 
@@ -102,14 +102,14 @@ Also recommended:
 
 ## CLI and SDK
 
-- CLI: `corebot` (or `pnpm run dev` / `pnpm run start`)
-- SDK: import from `@corebot/core` and manage lifecycle via `createCorebotApp()`
-- CLI flags: `corebot --help`, `corebot --version`, `corebot preflight`
+- CLI: `coreclaw` (or `pnpm run dev` / `pnpm run start`)
+- SDK: import from `@coreclaw/core` and manage lifecycle via `createCoreclawApp()`
+- CLI flags: `coreclaw --help`, `coreclaw --version`, `coreclaw preflight`
 
 ```ts
-import { createCorebotApp, loadConfig } from "@corebot/core";
+import { createCoreclawApp, loadConfig } from "@coreclaw/core";
 
-const app = await createCorebotApp({ config: loadConfig() });
+const app = await createCoreclawApp({ config: loadConfig() });
 await app.start();
 // ...
 await app.stop();
@@ -141,36 +141,36 @@ pnpm run build
 node dist/bin.js
 
 # Use a custom workspace/data directory
-COREBOT_WORKSPACE=./workspace COREBOT_DATA_DIR=./data pnpm run dev
+CORECLAW_WORKSPACE=./workspace CORECLAW_DATA_DIR=./data pnpm run dev
 
 # Enable shell tool with executable allowlist
-COREBOT_ALLOW_SHELL=true COREBOT_SHELL_ALLOWLIST="ls,git" pnpm run dev
+CORECLAW_ALLOW_SHELL=true CORECLAW_SHELL_ALLOWLIST="ls,git" pnpm run dev
 
 # Enable web.search (Brave Search API)
-BRAVE_API_KEY=YOUR_KEY COREBOT_ALLOWED_ENV=BRAVE_API_KEY pnpm run dev
+BRAVE_API_KEY=YOUR_KEY CORECLAW_ALLOWED_ENV=BRAVE_API_KEY pnpm run dev
 
 # Restrict web.fetch to specific hosts/domains
-COREBOT_WEB_ALLOWLIST="example.com,api.example.com" pnpm run dev
+CORECLAW_WEB_ALLOWLIST="example.com,api.example.com" pnpm run dev
 
 # Restrict web.fetch ports
-COREBOT_WEB_ALLOWED_PORTS="443,8443" COREBOT_WEB_BLOCKED_PORTS="8080" pnpm run dev
+CORECLAW_WEB_ALLOWED_PORTS="443,8443" CORECLAW_WEB_BLOCKED_PORTS="8080" pnpm run dev
 
 # Isolate multiple high-risk tools in worker process
-COREBOT_ISOLATION_TOOLS="shell.exec,web.fetch,fs.write" pnpm run dev
+CORECLAW_ISOLATION_TOOLS="shell.exec,web.fetch,fs.write" pnpm run dev
 
 # Enable observability HTTP endpoints
-COREBOT_OBS_HTTP_ENABLED=true COREBOT_OBS_HTTP_PORT=3210 pnpm run dev
+CORECLAW_OBS_HTTP_ENABLED=true CORECLAW_OBS_HTTP_PORT=3210 pnpm run dev
 
 # Enable webhook channel
-COREBOT_WEBHOOK_ENABLED=true COREBOT_WEBHOOK_AUTH_TOKEN=YOUR_TOKEN pnpm run dev
+CORECLAW_WEBHOOK_ENABLED=true CORECLAW_WEBHOOK_AUTH_TOKEN=YOUR_TOKEN pnpm run dev
 
 # Manual database backup / restore
 pnpm run ops:db:backup -- --db data/bot.sqlite
 pnpm run ops:db:restore -- --db data/bot.sqlite --from data/backups/manual-xxxx.sqlite --force
 
 # Validate startup config and MCP file before deployment
-corebot preflight
-corebot preflight --mcp-config ./path/to/.mcp.json
+coreclaw preflight
+coreclaw preflight --mcp-config ./path/to/.mcp.json
 ```
 
 CLI queue ops:
@@ -298,105 +298,105 @@ You can configure via `config.json` or environment variables.
 - `OPENAI_BASE_URL`
 - `OPENAI_MODEL`
 - `OPENAI_TEMPERATURE`
-- `OPENAI_TIMEOUT_MS` (deprecated alias for `COREBOT_PROVIDER_TIMEOUT_MS`)
-- `COREBOT_PROVIDER_TIMEOUT_MS`
-- `COREBOT_PROVIDER_MAX_INPUT_TOKENS`
-- `COREBOT_PROVIDER_RESERVE_OUTPUT_TOKENS`
-- `COREBOT_WORKSPACE`
-- `COREBOT_DATA_DIR`
-- `COREBOT_SQLITE_PATH`
-- `COREBOT_LOG_LEVEL`
-- `COREBOT_HISTORY_MAX`
-- `COREBOT_STORE_FULL`
-- `COREBOT_MAX_TOOL_ITER`
-- `COREBOT_MAX_TOOL_OUTPUT`
-- `COREBOT_SKILLS_DIR`
-- `COREBOT_MCP_CONFIG`
-- `COREBOT_MCP_SYNC_BACKOFF_BASE_MS`
-- `COREBOT_MCP_SYNC_BACKOFF_MAX_MS`
-- `COREBOT_MCP_SYNC_OPEN_CIRCUIT_AFTER_FAILURES`
-- `COREBOT_MCP_SYNC_CIRCUIT_RESET_MS`
-- `COREBOT_HEARTBEAT_ENABLED`
-- `COREBOT_HEARTBEAT_INTERVAL_MS`
-- `COREBOT_HEARTBEAT_WAKE_DEBOUNCE_MS`
-- `COREBOT_HEARTBEAT_WAKE_RETRY_MS`
-- `COREBOT_HEARTBEAT_PROMPT_PATH`
-- `COREBOT_HEARTBEAT_ACTIVE_HOURS`
-- `COREBOT_HEARTBEAT_SKIP_WHEN_INBOUND_BUSY`
-- `COREBOT_HEARTBEAT_ACK_TOKEN`
-- `COREBOT_HEARTBEAT_SUPPRESS_ACK`
-- `COREBOT_HEARTBEAT_DEDUPE_WINDOW_MS`
-- `COREBOT_HEARTBEAT_MAX_DISPATCH_PER_RUN`
-- `COREBOT_ISOLATION_ENABLED`
-- `COREBOT_ISOLATION_TOOLS`
-- `COREBOT_ISOLATION_WORKER_TIMEOUT_MS`
-- `COREBOT_ISOLATION_MAX_WORKER_OUTPUT_CHARS`
-- `COREBOT_ISOLATION_MAX_CONCURRENT_WORKERS`
-- `COREBOT_ISOLATION_OPEN_CIRCUIT_AFTER_FAILURES`
-- `COREBOT_ISOLATION_CIRCUIT_RESET_MS`
-- `COREBOT_ALLOW_SHELL`
-- `COREBOT_SHELL_ALLOWLIST`
-- `COREBOT_ALLOWED_ENV`
-- `COREBOT_WEB_ALLOWLIST`
-- `COREBOT_WEB_ALLOWED_PORTS`
-- `COREBOT_WEB_BLOCKED_PORTS`
-- `COREBOT_BUS_POLL_MS`
-- `COREBOT_BUS_BATCH_SIZE`
-- `COREBOT_BUS_MAX_ATTEMPTS`
-- `COREBOT_BUS_RETRY_BACKOFF_MS`
-- `COREBOT_BUS_MAX_RETRY_BACKOFF_MS`
-- `COREBOT_BUS_PROCESSING_TIMEOUT_MS`
-- `COREBOT_BUS_MAX_PENDING_INBOUND`
-- `COREBOT_BUS_MAX_PENDING_OUTBOUND`
-- `COREBOT_BUS_OVERLOAD_PENDING_THRESHOLD`
-- `COREBOT_BUS_OVERLOAD_BACKOFF_MS`
-- `COREBOT_BUS_CHAT_RATE_WINDOW_MS`
-- `COREBOT_BUS_CHAT_RATE_MAX`
-- `COREBOT_OBS_ENABLED`
-- `COREBOT_OBS_REPORT_MS`
-- `COREBOT_OBS_HTTP_ENABLED`
-- `COREBOT_OBS_HTTP_HOST`
-- `COREBOT_OBS_HTTP_PORT`
-- `COREBOT_SLO_ENABLED`
-- `COREBOT_SLO_ALERT_COOLDOWN_MS`
-- `COREBOT_SLO_MAX_PENDING_QUEUE`
-- `COREBOT_SLO_MAX_DEAD_LETTER_QUEUE`
-- `COREBOT_SLO_MAX_TOOL_FAILURE_RATE`
-- `COREBOT_SLO_MAX_SCHEDULER_DELAY_MS`
-- `COREBOT_SLO_MAX_MCP_FAILURE_RATE`
-- `COREBOT_SLO_ALERT_WEBHOOK_URL`
-- `COREBOT_MCP_ALLOWED_SERVERS`
-- `COREBOT_MCP_ALLOWED_TOOLS`
-- `COREBOT_ADMIN_BOOTSTRAP_KEY`
-- `COREBOT_ADMIN_BOOTSTRAP_SINGLE_USE`
-- `COREBOT_ADMIN_BOOTSTRAP_MAX_ATTEMPTS`
-- `COREBOT_ADMIN_BOOTSTRAP_LOCKOUT_MINUTES`
-- `COREBOT_WEBHOOK_ENABLED`
-- `COREBOT_WEBHOOK_HOST`
-- `COREBOT_WEBHOOK_PORT`
-- `COREBOT_WEBHOOK_PATH`
-- `COREBOT_WEBHOOK_AUTH_TOKEN`
-- `COREBOT_WEBHOOK_MAX_BODY_BYTES`
+- `OPENAI_TIMEOUT_MS` (deprecated alias for `CORECLAW_PROVIDER_TIMEOUT_MS`)
+- `CORECLAW_PROVIDER_TIMEOUT_MS`
+- `CORECLAW_PROVIDER_MAX_INPUT_TOKENS`
+- `CORECLAW_PROVIDER_RESERVE_OUTPUT_TOKENS`
+- `CORECLAW_WORKSPACE`
+- `CORECLAW_DATA_DIR`
+- `CORECLAW_SQLITE_PATH`
+- `CORECLAW_LOG_LEVEL`
+- `CORECLAW_HISTORY_MAX`
+- `CORECLAW_STORE_FULL`
+- `CORECLAW_MAX_TOOL_ITER`
+- `CORECLAW_MAX_TOOL_OUTPUT`
+- `CORECLAW_SKILLS_DIR`
+- `CORECLAW_MCP_CONFIG`
+- `CORECLAW_MCP_SYNC_BACKOFF_BASE_MS`
+- `CORECLAW_MCP_SYNC_BACKOFF_MAX_MS`
+- `CORECLAW_MCP_SYNC_OPEN_CIRCUIT_AFTER_FAILURES`
+- `CORECLAW_MCP_SYNC_CIRCUIT_RESET_MS`
+- `CORECLAW_HEARTBEAT_ENABLED`
+- `CORECLAW_HEARTBEAT_INTERVAL_MS`
+- `CORECLAW_HEARTBEAT_WAKE_DEBOUNCE_MS`
+- `CORECLAW_HEARTBEAT_WAKE_RETRY_MS`
+- `CORECLAW_HEARTBEAT_PROMPT_PATH`
+- `CORECLAW_HEARTBEAT_ACTIVE_HOURS`
+- `CORECLAW_HEARTBEAT_SKIP_WHEN_INBOUND_BUSY`
+- `CORECLAW_HEARTBEAT_ACK_TOKEN`
+- `CORECLAW_HEARTBEAT_SUPPRESS_ACK`
+- `CORECLAW_HEARTBEAT_DEDUPE_WINDOW_MS`
+- `CORECLAW_HEARTBEAT_MAX_DISPATCH_PER_RUN`
+- `CORECLAW_ISOLATION_ENABLED`
+- `CORECLAW_ISOLATION_TOOLS`
+- `CORECLAW_ISOLATION_WORKER_TIMEOUT_MS`
+- `CORECLAW_ISOLATION_MAX_WORKER_OUTPUT_CHARS`
+- `CORECLAW_ISOLATION_MAX_CONCURRENT_WORKERS`
+- `CORECLAW_ISOLATION_OPEN_CIRCUIT_AFTER_FAILURES`
+- `CORECLAW_ISOLATION_CIRCUIT_RESET_MS`
+- `CORECLAW_ALLOW_SHELL`
+- `CORECLAW_SHELL_ALLOWLIST`
+- `CORECLAW_ALLOWED_ENV`
+- `CORECLAW_WEB_ALLOWLIST`
+- `CORECLAW_WEB_ALLOWED_PORTS`
+- `CORECLAW_WEB_BLOCKED_PORTS`
+- `CORECLAW_BUS_POLL_MS`
+- `CORECLAW_BUS_BATCH_SIZE`
+- `CORECLAW_BUS_MAX_ATTEMPTS`
+- `CORECLAW_BUS_RETRY_BACKOFF_MS`
+- `CORECLAW_BUS_MAX_RETRY_BACKOFF_MS`
+- `CORECLAW_BUS_PROCESSING_TIMEOUT_MS`
+- `CORECLAW_BUS_MAX_PENDING_INBOUND`
+- `CORECLAW_BUS_MAX_PENDING_OUTBOUND`
+- `CORECLAW_BUS_OVERLOAD_PENDING_THRESHOLD`
+- `CORECLAW_BUS_OVERLOAD_BACKOFF_MS`
+- `CORECLAW_BUS_CHAT_RATE_WINDOW_MS`
+- `CORECLAW_BUS_CHAT_RATE_MAX`
+- `CORECLAW_OBS_ENABLED`
+- `CORECLAW_OBS_REPORT_MS`
+- `CORECLAW_OBS_HTTP_ENABLED`
+- `CORECLAW_OBS_HTTP_HOST`
+- `CORECLAW_OBS_HTTP_PORT`
+- `CORECLAW_SLO_ENABLED`
+- `CORECLAW_SLO_ALERT_COOLDOWN_MS`
+- `CORECLAW_SLO_MAX_PENDING_QUEUE`
+- `CORECLAW_SLO_MAX_DEAD_LETTER_QUEUE`
+- `CORECLAW_SLO_MAX_TOOL_FAILURE_RATE`
+- `CORECLAW_SLO_MAX_SCHEDULER_DELAY_MS`
+- `CORECLAW_SLO_MAX_MCP_FAILURE_RATE`
+- `CORECLAW_SLO_ALERT_WEBHOOK_URL`
+- `CORECLAW_MCP_ALLOWED_SERVERS`
+- `CORECLAW_MCP_ALLOWED_TOOLS`
+- `CORECLAW_ADMIN_BOOTSTRAP_KEY`
+- `CORECLAW_ADMIN_BOOTSTRAP_SINGLE_USE`
+- `CORECLAW_ADMIN_BOOTSTRAP_MAX_ATTEMPTS`
+- `CORECLAW_ADMIN_BOOTSTRAP_LOCKOUT_MINUTES`
+- `CORECLAW_WEBHOOK_ENABLED`
+- `CORECLAW_WEBHOOK_HOST`
+- `CORECLAW_WEBHOOK_PORT`
+- `CORECLAW_WEBHOOK_PATH`
+- `CORECLAW_WEBHOOK_AUTH_TOKEN`
+- `CORECLAW_WEBHOOK_MAX_BODY_BYTES`
 
 Notes:
 
-- `COREBOT_ALLOWED_ENV` is used by tools that explicitly gate env access (for example `web.search`) and by isolated `shell.exec` workers.
-- `COREBOT_SHELL_ALLOWLIST` matches executable names (for example `ls,git`), not full command prefixes.
-- `COREBOT_WEB_ALLOWLIST` restricts `web.fetch` target hosts (exact host or subdomain match).
-- `COREBOT_WEB_ALLOWED_PORTS` and `COREBOT_WEB_BLOCKED_PORTS` provide port allow/deny controls for `web.fetch`.
-- `COREBOT_ISOLATION_TOOLS` defaults to `shell.exec`; add `web.fetch` and/or `fs.write` to isolate network and file-write execution as well.
-- `COREBOT_ISOLATION_MAX_CONCURRENT_WORKERS` caps simultaneous isolated workers (default `4`).
-- `COREBOT_ISOLATION_OPEN_CIRCUIT_AFTER_FAILURES` and `COREBOT_ISOLATION_CIRCUIT_RESET_MS` control per-tool circuit breaker for repeated worker failures.
+- `CORECLAW_ALLOWED_ENV` is used by tools that explicitly gate env access (for example `web.search`) and by isolated `shell.exec` workers.
+- `CORECLAW_SHELL_ALLOWLIST` matches executable names (for example `ls,git`), not full command prefixes.
+- `CORECLAW_WEB_ALLOWLIST` restricts `web.fetch` target hosts (exact host or subdomain match).
+- `CORECLAW_WEB_ALLOWED_PORTS` and `CORECLAW_WEB_BLOCKED_PORTS` provide port allow/deny controls for `web.fetch`.
+- `CORECLAW_ISOLATION_TOOLS` defaults to `shell.exec`; add `web.fetch` and/or `fs.write` to isolate network and file-write execution as well.
+- `CORECLAW_ISOLATION_MAX_CONCURRENT_WORKERS` caps simultaneous isolated workers (default `4`).
+- `CORECLAW_ISOLATION_OPEN_CIRCUIT_AFTER_FAILURES` and `CORECLAW_ISOLATION_CIRCUIT_RESET_MS` control per-tool circuit breaker for repeated worker failures.
 - Default policy denies non-admin `fs.write` to protected paths (`skills/`, `IDENTITY.md`, `TOOLS.md`, `USER.md`, `.mcp.json`).
-- `COREBOT_MCP_ALLOWED_SERVERS` and `COREBOT_MCP_ALLOWED_TOOLS` act as allowlists when set; empty lists allow all discovered MCP servers/tools.
-- `COREBOT_MCP_SYNC_*` controls MCP auto-sync retry backoff and temporary circuit-open window after repeated failures.
-- `COREBOT_PROVIDER_TIMEOUT_MS` bounds each LLM request; timeout errors enter normal retry/dead-letter flow.
-- `COREBOT_PROVIDER_MAX_INPUT_TOKENS` and `COREBOT_PROVIDER_RESERVE_OUTPUT_TOKENS` enforce prompt budgeting before each LLM turn.
-- `COREBOT_HEARTBEAT_ACTIVE_HOURS` accepts `HH:mm-HH:mm` in local process time; empty means always active.
-- `COREBOT_HEARTBEAT_PROMPT_PATH` is resolved relative to `workspaceDir` and must be non-empty to dispatch heartbeat turns.
-- `COREBOT_WEBHOOK_AUTH_TOKEN` can be sent via `Authorization: Bearer <token>` or `x-corebot-token`.
-- `COREBOT_ADMIN_BOOTSTRAP_SINGLE_USE=true` invalidates bootstrap elevation after first successful use.
-- `COREBOT_ADMIN_BOOTSTRAP_MAX_ATTEMPTS` and `COREBOT_ADMIN_BOOTSTRAP_LOCKOUT_MINUTES` control invalid-key lockout policy.
+- `CORECLAW_MCP_ALLOWED_SERVERS` and `CORECLAW_MCP_ALLOWED_TOOLS` act as allowlists when set; empty lists allow all discovered MCP servers/tools.
+- `CORECLAW_MCP_SYNC_*` controls MCP auto-sync retry backoff and temporary circuit-open window after repeated failures.
+- `CORECLAW_PROVIDER_TIMEOUT_MS` bounds each LLM request; timeout errors enter normal retry/dead-letter flow.
+- `CORECLAW_PROVIDER_MAX_INPUT_TOKENS` and `CORECLAW_PROVIDER_RESERVE_OUTPUT_TOKENS` enforce prompt budgeting before each LLM turn.
+- `CORECLAW_HEARTBEAT_ACTIVE_HOURS` accepts `HH:mm-HH:mm` in local process time; empty means always active.
+- `CORECLAW_HEARTBEAT_PROMPT_PATH` is resolved relative to `workspaceDir` and must be non-empty to dispatch heartbeat turns.
+- `CORECLAW_WEBHOOK_AUTH_TOKEN` can be sent via `Authorization: Bearer <token>` or `x-coreclaw-token`.
+- `CORECLAW_ADMIN_BOOTSTRAP_SINGLE_USE=true` invalidates bootstrap elevation after first successful use.
+- `CORECLAW_ADMIN_BOOTSTRAP_MAX_ATTEMPTS` and `CORECLAW_ADMIN_BOOTSTRAP_LOCKOUT_MINUTES` control invalid-key lockout policy.
 
 ## Deployment Guide
 
@@ -416,7 +416,7 @@ node dist/bin.js
 ```
 
 3. **Persist data**  
-   Ensure `data/` and `workspace/` are persisted (bind mount or volume). Corebot auto-creates them if missing.
+   Ensure `data/` and `workspace/` are persisted (bind mount or volume). Coreclaw auto-creates them if missing.
 
 4. **Config**  
    Use `config.json` for stable configuration in production; use env vars for secrets.
@@ -426,12 +426,12 @@ node dist/bin.js
 Build and run using the included `Dockerfile`:
 
 ```bash
-docker build -t corebot .
+docker build -t coreclaw .
 docker run -it --rm \\
   -e OPENAI_API_KEY=YOUR_KEY \\
   -v $(pwd)/data:/app/data \\
   -v $(pwd)/workspace:/app/workspace \\
-  corebot
+  coreclaw
 ```
 
 Optional: mount `.mcp.json` or `config.json` if you want MCP or custom settings:
@@ -443,7 +443,7 @@ docker run -it --rm \\
   -v $(pwd)/workspace:/app/workspace \\
   -v $(pwd)/.mcp.json:/app/.mcp.json \\
   -v $(pwd)/config.json:/app/config.json \\
-  corebot
+  coreclaw
 ```
 
 ## CI Template (GitHub Actions)
@@ -560,13 +560,13 @@ Memory files: `workspace/memory/MEMORY.md` (global), `workspace/memory/{channel}
 
 ### Roles
 
-Corebot uses two roles: **admin** and **normal**. New chats default to `normal`.
+Coreclaw uses two roles: **admin** and **normal**. New chats default to `normal`.
 
 ### Admin Bootstrap
 
 The first admin is created through a bootstrap flow:
 
-1. Set `COREBOT_ADMIN_BOOTSTRAP_KEY` in config/env.
+1. Set `CORECLAW_ADMIN_BOOTSTRAP_KEY` in config/env.
 2. A user calls `chat.register` with `role=admin` and `bootstrapKey=<the key>`.
 3. If the key matches, the chat is promoted to admin.
 4. With `adminBootstrapSingleUse=true` (default), the key is invalidated after first use.
@@ -601,7 +601,7 @@ Non-admin `fs.write` is denied for: `IDENTITY.md`, `TOOLS.md`, `USER.md`, `.mcp.
 
 ## Memory
 
-Corebot maintains two types of persistent memory:
+Coreclaw maintains two types of persistent memory:
 
 - **Global memory** (`workspace/memory/MEMORY.md`): shared across all chats. Admin-only for writes.
 - **Per-chat memory** (`workspace/memory/{channel}_{chatId}.md`): scoped to a specific chat session.
@@ -610,7 +610,7 @@ Both are automatically included in the system prompt when available, except isol
 
 ## Conversation Compaction
 
-When the stored message count for a chat exceeds `historyMaxMessages * 2`, Corebot automatically compacts:
+When the stored message count for a chat exceeds `historyMaxMessages * 2`, Coreclaw automatically compacts:
 
 1. Recent messages are sent to the LLM to generate a bullet summary (max 150 words).
 2. Old messages beyond `historyMaxMessages` are pruned from storage.
@@ -620,7 +620,7 @@ This keeps context manageable while preserving key facts and decisions.
 
 ## Inbound Execution Ledger
 
-To ensure idempotency when messages are re-queued (e.g., after a retry), Corebot maintains an `inbound_executions` table:
+To ensure idempotency when messages are re-queued (e.g., after a retry), Coreclaw maintains an `inbound_executions` table:
 
 - Before processing, the router checks if the inbound message was already processed.
 - If completed, the cached response is reused without re-running the LLM or tools.
@@ -671,8 +671,8 @@ MCP tools are injected as: `mcp__<server>__<tool>`.
 You can also force refresh manually with `mcp.reload`.
 If `.mcp.json` is invalid (for example malformed JSON), reload is rejected and the previous MCP tool set remains active.
 Each enabled server must define exactly one of `command` or `url`; `args/env` are only valid with `command`.
-Use `corebot preflight` to validate config and `.mcp.json` before rolling out changes.
-Reload attempts are tracked in telemetry (`corebot_mcp_reload_*`) and persisted in `audit_events` with reason/duration metadata.
+Use `coreclaw preflight` to validate config and `.mcp.json` before rolling out changes.
+Reload attempts are tracked in telemetry (`coreclaw_mcp_reload_*`) and persisted in `audit_events` with reason/duration metadata.
 
 ## Agent Heartbeat
 
@@ -703,13 +703,13 @@ Scheduler emits synthetic inbound messages with `context_mode`:
 
 For single-host reliability, track these first:
 
-1. `corebot_queue_pending{direction="inbound"}`
-2. `corebot_queue_dead_letter{direction="inbound"}`
-3. `corebot_tools_failure_rate`
-4. `corebot_scheduler_max_delay_ms`
-5. `corebot_mcp_failure_rate`
-6. `corebot_heartbeat_scope_sent_total{scope="delivery"}`
-7. `corebot_heartbeat_scope_skipped_total{scope="delivery"}`
+1. `coreclaw_queue_pending{direction="inbound"}`
+2. `coreclaw_queue_dead_letter{direction="inbound"}`
+3. `coreclaw_tools_failure_rate`
+4. `coreclaw_scheduler_max_delay_ms`
+5. `coreclaw_mcp_failure_rate`
+6. `coreclaw_heartbeat_scope_sent_total{scope="delivery"}`
+7. `coreclaw_heartbeat_scope_skipped_total{scope="delivery"}`
 
 Fast interpretation:
 
@@ -727,8 +727,8 @@ Fast interpretation:
   - `GET /metrics` (Prometheus format)
   - `GET /status` (JSON snapshot with queue/tool/scheduler/MCP health)
 - Webhook channel:
-  - `POST <COREBOT_WEBHOOK_PATH>` with JSON `{chatId, content, senderId?, id?, createdAt?, metadata?}`
-  - `GET <COREBOT_WEBHOOK_PATH>/outbound?chatId=<id>&limit=<n>`
+  - `POST <CORECLAW_WEBHOOK_PATH>` with JSON `{chatId, content, senderId?, id?, createdAt?, metadata?}`
+  - `GET <CORECLAW_WEBHOOK_PATH>/outbound?chatId=<id>&limit=<n>`
 
 Detailed incident and recovery procedures are documented in `RUNBOOK.md`.
 
@@ -754,7 +754,7 @@ workspace/
 
 ## Inspiration
 
-Corebot is inspired by NanoClaw + NanoBot patterns.
+Coreclaw is inspired by NanoClaw + NanoBot patterns.
 
 ---
 

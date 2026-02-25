@@ -65,7 +65,7 @@ const defaultClientFactory: McpClientFactory = {
     }
 
     const client = new Client(
-      { name: "corebot", version: "0.1.0" },
+      { name: "coreclaw", version: "0.1.0" },
       { capabilities: {} }
     ) as McpClientInstance;
 

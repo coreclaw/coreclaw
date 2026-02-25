@@ -1,4 +1,4 @@
-# Corebot Runbook
+# Coreclaw Runbook
 
 ## 1) Startup Checklist
 
@@ -13,16 +13,16 @@
 ## 2) Runtime Monitoring
 
 1. Scrape `GET /metrics` for:
-   - `corebot_queue_pending`
-   - `corebot_queue_dead_letter`
-   - `corebot_tools_failure_rate`
-   - `corebot_scheduler_max_delay_ms`
-   - `corebot_mcp_failure_rate`
-   - `corebot_heartbeat_calls_total`
-   - `corebot_heartbeat_scope_sent_total{scope="delivery"}`
-   - `corebot_heartbeat_scope_skipped_total{scope="delivery"}`
+   - `coreclaw_queue_pending`
+   - `coreclaw_queue_dead_letter`
+   - `coreclaw_tools_failure_rate`
+   - `coreclaw_scheduler_max_delay_ms`
+   - `coreclaw_mcp_failure_rate`
+   - `coreclaw_heartbeat_calls_total`
+   - `coreclaw_heartbeat_scope_sent_total{scope="delivery"}`
+   - `coreclaw_heartbeat_scope_skipped_total{scope="delivery"}`
 2. For on-demand diagnostics use `GET /status`.
-3. If SLO alerts are enabled, check logs and optional `COREBOT_SLO_ALERT_WEBHOOK_URL` sink.
+3. If SLO alerts are enabled, check logs and optional `CORECLAW_SLO_ALERT_WEBHOOK_URL` sink.
 4. Use admin tool `heartbeat.status` to inspect runtime enablement, next due chats, and active config.
 
 ## 3) Queue / DLQ Operations
@@ -34,8 +34,8 @@
    - CLI: `/dlq replay <queueId|inbound|outbound|all> [limit]`
    - Tool: `bus.dead_letter.replay`
 3. If queue overflow/rate-limit drops happen repeatedly:
-   - increase `COREBOT_BUS_MAX_PENDING_*` carefully,
-   - tune `COREBOT_BUS_CHAT_RATE_*`,
+   - increase `CORECLAW_BUS_MAX_PENDING_*` carefully,
+   - tune `CORECLAW_BUS_CHAT_RATE_*`,
    - investigate noisy chats and failing tools.
 
 ## 4) Database Backup / Restore
@@ -56,8 +56,8 @@
 ## 6) Security / Audit Review
 
 1. MCP usage should be constrained with:
-   - `COREBOT_MCP_ALLOWED_SERVERS`
-   - `COREBOT_MCP_ALLOWED_TOOLS`
+   - `CORECLAW_MCP_ALLOWED_SERVERS`
+   - `CORECLAW_MCP_ALLOWED_TOOLS`
 2. Tool execution audit is stored in `audit_events`:
    - denials (`outcome=denied`)
    - errors (`outcome=error`)
@@ -66,27 +66,27 @@
 
 ## 7) Webhook Channel Ops
 
-1. Inbound endpoint: `POST <COREBOT_WEBHOOK_PATH>`.
-2. Outbound pull endpoint: `GET <COREBOT_WEBHOOK_PATH>/outbound?chatId=<id>&limit=<n>`.
-3. Use `COREBOT_WEBHOOK_AUTH_TOKEN` and send token via:
+1. Inbound endpoint: `POST <CORECLAW_WEBHOOK_PATH>`.
+2. Outbound pull endpoint: `GET <CORECLAW_WEBHOOK_PATH>/outbound?chatId=<id>&limit=<n>`.
+3. Use `CORECLAW_WEBHOOK_AUTH_TOKEN` and send token via:
    - `Authorization: Bearer <token>`, or
-   - `x-corebot-token`.
+   - `x-coreclaw-token`.
 
 ## 8) Circuit Breaker Recovery (Isolated Runtime)
 
 When a high-risk tool (e.g., `shell.exec`) fails consecutively, the circuit breaker opens:
 
 1. **Symptom**: tool calls return `Isolated runtime circuit open for <tool> until <time>`.
-2. **Automatic recovery**: the circuit resets after `COREBOT_ISOLATION_CIRCUIT_RESET_MS` (default 30s).
+2. **Automatic recovery**: the circuit resets after `CORECLAW_ISOLATION_CIRCUIT_RESET_MS` (default 30s).
 3. **Manual recovery**: restart the process to immediately reset all circuits.
 4. **Root cause investigation**:
    - Check logs for `isolated runtime circuit opened after repeated failures`.
    - Look at the `error` field for the underlying failure reason.
    - Common causes: workspace path issues, command not found, network errors, worker crashes.
 5. **Tuning**:
-   - Increase `COREBOT_ISOLATION_OPEN_CIRCUIT_AFTER_FAILURES` if transient failures are expected.
-   - Increase `COREBOT_ISOLATION_CIRCUIT_RESET_MS` if you want longer cooldown periods.
-   - Increase `COREBOT_ISOLATION_MAX_CONCURRENT_WORKERS` if workers are queuing up.
+   - Increase `CORECLAW_ISOLATION_OPEN_CIRCUIT_AFTER_FAILURES` if transient failures are expected.
+   - Increase `CORECLAW_ISOLATION_CIRCUIT_RESET_MS` if you want longer cooldown periods.
+   - Increase `CORECLAW_ISOLATION_MAX_CONCURRENT_WORKERS` if workers are queuing up.
 
 ## 9) Common Troubleshooting
 
@@ -130,7 +130,7 @@ When a high-risk tool (e.g., `shell.exec`) fails consecutively, the circuit brea
 4. Verify the task's `scheduleValue` is a valid cron expression / interval / ISO datetime.
 
 ### Admin bootstrap not working
-1. Verify `COREBOT_ADMIN_BOOTSTRAP_KEY` is set.
+1. Verify `CORECLAW_ADMIN_BOOTSTRAP_KEY` is set.
 2. Check if bootstrap is already used (`adminBootstrapSingleUse=true`).
 3. Check if locked out due to failed attempts (check logs for lockout messages).
 4. If locked, wait for `adminBootstrapLockoutMinutes` to expire. Restarting alone does not clear lockout state because it is persisted in SQLite meta.
@@ -171,7 +171,7 @@ When a high-risk tool (e.g., `shell.exec`) fails consecutively, the circuit brea
 
 ## 11) Log Interpretation
 
-Corebot uses Pino structured JSON logs. Key log messages:
+Coreclaw uses Pino structured JSON logs. Key log messages:
 
 | Log Message | Level | Meaning |
 |-------------|-------|---------|

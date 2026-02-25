@@ -5,11 +5,11 @@ import { fileURLToPath } from "node:url";
 import { main } from "./main.js";
 import { runPreflightChecks } from "./preflight.js";
 
-const HELP_TEXT = `corebot - lightweight AI bot runtime
+const HELP_TEXT = `coreclaw - lightweight AI bot runtime
 
 Usage:
-  corebot [options]
-  corebot preflight [--mcp-config <path>]
+  coreclaw [options]
+  coreclaw preflight [--mcp-config <path>]
 
 Options:
   -h, --help      Show help
@@ -85,7 +85,7 @@ const parsePreflightArgs = (args: string[]) => {
 if (isDirectExecution()) {
   void runCli().catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`corebot command failed: ${message}\n`);
+    process.stderr.write(`coreclaw command failed: ${message}\n`);
     process.exit(1);
   });
 }
