@@ -16,6 +16,11 @@ test("runPreflightChecks validates explicit MCP config path", () => {
     assert.equal(report.mcpConfigPresent, true);
     assert.equal(report.mcpServerCount, 1);
     assert.equal(report.resolvedMcpConfigPath, path.resolve(mcpPath));
+    assert.equal(typeof report.workspaceExists, "boolean");
+    assert.equal(typeof report.identityFilePresent, "boolean");
+    assert.equal(typeof report.toolsFilePresent, "boolean");
+    assert.equal(typeof report.providerApiKeyPresent, "boolean");
+    assert.ok(Array.isArray(report.warnings));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -53,3 +58,32 @@ test("coreclaw preflight command rejects invalid MCP config", async () => {
   }
 });
 
+test("runPreflightChecks enforces hardened security profile", () => {
+  const previousProfile = process.env.CORECLAW_SECURITY_PROFILE;
+  const previousAllowShell = process.env.CORECLAW_ALLOW_SHELL;
+  const previousAllowlist = process.env.CORECLAW_WEB_ALLOWLIST;
+
+  process.env.CORECLAW_SECURITY_PROFILE = "hardened";
+  process.env.CORECLAW_ALLOW_SHELL = "true";
+  process.env.CORECLAW_WEB_ALLOWLIST = "example.com";
+
+  try {
+    assert.throws(() => runPreflightChecks(), /hardened profile/);
+  } finally {
+    if (previousProfile === undefined) {
+      delete process.env.CORECLAW_SECURITY_PROFILE;
+    } else {
+      process.env.CORECLAW_SECURITY_PROFILE = previousProfile;
+    }
+    if (previousAllowShell === undefined) {
+      delete process.env.CORECLAW_ALLOW_SHELL;
+    } else {
+      process.env.CORECLAW_ALLOW_SHELL = previousAllowShell;
+    }
+    if (previousAllowlist === undefined) {
+      delete process.env.CORECLAW_WEB_ALLOWLIST;
+    } else {
+      process.env.CORECLAW_WEB_ALLOWLIST = previousAllowlist;
+    }
+  }
+});

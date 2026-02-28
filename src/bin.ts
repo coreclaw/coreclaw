@@ -51,6 +51,15 @@ export const runCli = async (args: string[] = process.argv.slice(2)) => {
       `mcp.config.status: ${report.mcpConfigPresent ? "valid" : "missing (treated as empty)"}\n`
     );
     process.stdout.write(`mcp.config.servers: ${report.mcpServerCount}\n`);
+    process.stdout.write(`workspace.path: ${report.workspaceDir}\n`);
+    process.stdout.write(`workspace.exists: ${report.workspaceExists ? "yes" : "no"}\n`);
+    process.stdout.write(`workspace.identity: ${report.identityFilePresent ? "present" : "missing"}\n`);
+    process.stdout.write(`workspace.tools: ${report.toolsFilePresent ? "present" : "missing"}\n`);
+    process.stdout.write(`provider.api_key: ${report.providerApiKeyPresent ? "set" : "missing"}\n`);
+    process.stdout.write(`warnings: ${report.warnings.length}\n`);
+    for (const warning of report.warnings) {
+      process.stdout.write(`warning: ${warning}\n`);
+    }
     return;
   }
   if (args.includes("--help") || args.includes("-h")) {
