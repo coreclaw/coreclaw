@@ -590,7 +590,7 @@ export class SqliteStorage {
       this.pruneWebhookOutboxChats(params.now, params.maxChats, params.chatTtlMs);
       const rows = this.db
         .prepare(
-          "SELECT id, chat_id, content, created_at FROM webhook_outbox WHERE chat_id = ? ORDER BY created_at ASC, id ASC LIMIT ?"
+          "SELECT id, chat_id, content, created_at FROM webhook_outbox WHERE chat_id = ? ORDER BY created_at ASC, rowid ASC LIMIT ?"
         )
         .all(params.chatId, params.limit) as Array<{
         id: string;
@@ -1379,7 +1379,7 @@ export class SqliteStorage {
   private trimWebhookOutboxPerChat(chatId: string, maxPerChat: number) {
     const overflow = this.db
       .prepare(
-        "SELECT id FROM webhook_outbox WHERE chat_id = ? ORDER BY created_at DESC, id DESC LIMIT -1 OFFSET ?"
+        "SELECT id FROM webhook_outbox WHERE chat_id = ? ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET ?"
       )
       .all(chatId, maxPerChat) as Array<{ id: string }>;
     if (overflow.length === 0) {
