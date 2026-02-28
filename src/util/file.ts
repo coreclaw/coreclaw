@@ -45,6 +45,20 @@ const sanitizeMemoryComponent = (value: string) => {
   return cleaned.slice(0, 120) || "unknown";
 };
 
+const isSafeLegacyMemoryComponent = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (/[\\/]/.test(trimmed)) {
+    return false;
+  }
+  if (/[\x00-\x1f\x7f]/.test(trimmed)) {
+    return false;
+  }
+  return true;
+};
+
 export const getChatMemoryRelativePath = (channel: string, chatId: string) => {
   const safeChannel = sanitizeMemoryComponent(channel);
   const safeChatId = sanitizeMemoryComponent(chatId);
@@ -85,6 +99,12 @@ export const resolveChatMemoryPath = (
 
   const legacyRelativePath = getLegacyChatMemoryRelativePath(channel, chatId);
   if (legacyRelativePath === preferredRelativePath) {
+    return preferredPath;
+  }
+  if (
+    !isSafeLegacyMemoryComponent(channel) ||
+    !isSafeLegacyMemoryComponent(chatId)
+  ) {
     return preferredPath;
   }
 

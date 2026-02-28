@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import {
   resolveWorkspacePath,
   getChatMemoryRelativePath,
-  getLegacyChatMemoryRelativePath
+  getLegacyChatMemoryRelativePath,
+  resolveChatMemoryPath
 } from "../src/util/file.js";
 import { createStorageFixture, createToolContext } from "./test-utils.js";
 import { memoryTools } from "../src/tools/builtins/memory.js";
@@ -146,6 +147,49 @@ test("chat memory falls back to existing legacy filename for compatibility", asy
     if (preferredPath !== legacyPath) {
       assert.equal(fs.existsSync(preferredPath), false);
     }
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("legacy chat memory fallback rejects traversal-like chat ids", async () => {
+  const fixture = createStorageFixture();
+  try {
+    const channel = "webhook";
+    const chatId = "../../../IDENTITY";
+    const identityPath = resolveWorkspacePath(fixture.workspaceDir, "IDENTITY.md");
+    fs.writeFileSync(identityPath, "identity-safe", "utf-8");
+
+    const resolved = resolveChatMemoryPath(fixture.workspaceDir, channel, chatId);
+    const expected = resolveWorkspacePath(
+      fixture.workspaceDir,
+      getChatMemoryRelativePath(channel, chatId)
+    );
+    assert.equal(resolved, expected);
+
+    const chat = fixture.storage.upsertChat({ channel, chatId });
+    const { context } = createToolContext({
+      config: fixture.config,
+      storage: fixture.storage,
+      workspaceDir: fixture.workspaceDir,
+      chatFk: chat.id,
+      channel,
+      chatId,
+      chatRole: "admin"
+    });
+    const writeTool = memoryTools().find((tool) => tool.name === "memory.write");
+    assert.ok(writeTool, "memory.write tool missing");
+    await writeTool!.run(
+      {
+        scope: "chat",
+        content: "chat-safe",
+        mode: "replace"
+      },
+      context
+    );
+
+    assert.equal(fs.readFileSync(identityPath, "utf-8"), "identity-safe");
+    assert.equal(fs.readFileSync(expected, "utf-8"), "chat-safe");
   } finally {
     fixture.cleanup();
   }
