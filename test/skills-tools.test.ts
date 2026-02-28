@@ -174,3 +174,35 @@ test("ContextBuilder truncates oversized system prompt under token budget", () =
     fixture.cleanup();
   }
 });
+
+test("ContextBuilder applies stricter budget for CJK-heavy prompts", () => {
+  const fixture = createStorageFixture({
+    provider: {
+      maxInputTokens: 220,
+      reserveOutputTokens: 120
+    }
+  });
+  try {
+    fs.writeFileSync(path.join(fixture.workspaceDir, "IDENTITY.md"), "你".repeat(600), "utf-8");
+    const chat = fixture.storage.upsertChat({ channel: "cli", chatId: "local" });
+    const builder = new ContextBuilder(fixture.storage, fixture.config, fixture.workspaceDir);
+    const built = builder.build({
+      chat,
+      skills: [],
+      inbound: {
+        id: "budget-cjk-1",
+        channel: "cli",
+        chatId: "local",
+        senderId: "user",
+        content: "请总结",
+        createdAt: new Date().toISOString()
+      }
+    });
+
+    assert.match(built.systemPrompt, /\[truncated by token budget\]/);
+    const last = built.messages[built.messages.length - 1];
+    assert.ok(last && "content" in last && String(last.content).includes("请总结"));
+  } finally {
+    fixture.cleanup();
+  }
+});

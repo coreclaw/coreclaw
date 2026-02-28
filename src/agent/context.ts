@@ -38,9 +38,18 @@ const renderSkillsIndex = (skills: SkillIndexEntry[], enabledSkills: Set<string>
 
 const ESTIMATED_CHARS_PER_TOKEN = 4;
 const MESSAGE_OVERHEAD_TOKENS = 4;
+const CJK_CHAR_PATTERN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
+const estimateCharTokens = (char: string) =>
+  CJK_CHAR_PATTERN.test(char) ? 1 : 1 / ESTIMATED_CHARS_PER_TOKEN;
 
 const estimateTextTokens = (text: string) =>
-  Math.max(1, Math.ceil(text.length / ESTIMATED_CHARS_PER_TOKEN));
+  Math.max(
+    1,
+    Math.ceil(
+      [...text].reduce((sum, char) => sum + estimateCharTokens(char), 0)
+    )
+  );
 
 const estimateMessageTokens = (message: ChatMessage) => {
   let total = MESSAGE_OVERHEAD_TOKENS;
@@ -66,12 +75,24 @@ const truncateTextToApproxTokens = (text: string, maxTokens: number) => {
   if (maxTokens <= 0) {
     return "";
   }
-  const maxChars = maxTokens * ESTIMATED_CHARS_PER_TOKEN;
-  if (text.length <= maxChars) {
+  if (estimateTextTokens(text) <= maxTokens) {
     return text;
   }
   const suffix = "\n...[truncated by token budget]";
-  const keep = Math.max(0, maxChars - suffix.length);
+  const suffixTokens = estimateTextTokens(suffix);
+  const availableTokens = Math.max(0, maxTokens - suffixTokens);
+
+  let usedTokens = 0;
+  let keep = 0;
+  for (const char of text) {
+    const charTokens = estimateCharTokens(char);
+    if (usedTokens + charTokens > availableTokens) {
+      break;
+    }
+    usedTokens += charTokens;
+    keep += char.length;
+  }
+
   return `${text.slice(0, keep)}${suffix}`;
 };
 
