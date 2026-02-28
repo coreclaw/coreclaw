@@ -116,6 +116,13 @@ export class ConversationRouter {
     const key = `${message.channel}:${message.chatId}`;
     const queue = this.queues.get(key) ?? new SerialQueue();
     this.queues.set(key, queue);
+    if (!queue.isIdle()) {
+      this.pruneQueues(key);
+      throw new BusDeferMessageError(
+        "Inbound chat queue is busy",
+        this.config.bus.retryBackoffMs
+      );
+    }
     const processing = queue.enqueue(() => this.processMessage(message));
     this.pruneQueues(key);
     try {

@@ -544,3 +544,59 @@ test("E2E: duplicated scheduled inbound logs task run once", async () => {
     await harness.cleanup();
   }
 });
+
+test("E2E: same-chat backlog is deferred instead of timing out at bus layer", async () => {
+  let firstServed = false;
+  const provider = new MockProvider(async (req) => {
+    const last = req.messages[req.messages.length - 1];
+    const content = "content" in last ? String(last.content) : "";
+    if (content.includes("first") && !firstServed) {
+      firstServed = true;
+      await new Promise((resolve) => setTimeout(resolve, 130));
+      return { content: "done:first" };
+    }
+    return { content: "done:second" };
+  });
+  const harness = createHarness(
+    provider,
+    {
+      bus: {
+        pollMs: 10,
+        batchSize: 20,
+        maxConcurrentHandlers: 2,
+        maxAttempts: 5,
+        retryBackoffMs: 20,
+        maxRetryBackoffMs: 200,
+        processingTimeoutMs: 150
+      }
+    }
+  );
+
+  try {
+    harness.bus.publishInbound({
+      id: "same-chat-1",
+      channel: "cli",
+      chatId: "local",
+      senderId: "user",
+      content: "first",
+      createdAt: new Date().toISOString()
+    });
+    harness.bus.publishInbound({
+      id: "same-chat-2",
+      channel: "cli",
+      chatId: "local",
+      senderId: "user",
+      content: "second",
+      createdAt: new Date().toISOString()
+    });
+
+    await waitUntil(() => harness.outbound.length >= 2, 4_000);
+
+    const dead = harness.storage.listDeadLetterBusMessages("inbound", 10);
+    assert.equal(dead.length, 0);
+    assert.ok(harness.outbound.some((item) => item.content === "done:first"));
+    assert.ok(harness.outbound.some((item) => item.content === "done:second"));
+  } finally {
+    await harness.cleanup();
+  }
+});
