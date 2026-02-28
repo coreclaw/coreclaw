@@ -2,13 +2,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import type { ToolSpec } from "../registry.js";
-import { resolveWorkspacePath } from "../../util/file.js";
+import {
+  getChatMemoryRelativePath,
+  resolveWorkspacePath
+} from "../../util/file.js";
 
 const getGlobalMemoryPath = (workspaceDir: string) =>
   resolveWorkspacePath(workspaceDir, "memory/MEMORY.md");
 
 const getChatMemoryPath = (workspaceDir: string, channel: string, chatId: string) =>
-  resolveWorkspacePath(workspaceDir, `memory/${channel}_${chatId}.md`);
+  resolveWorkspacePath(workspaceDir, getChatMemoryRelativePath(channel, chatId));
 
 export const memoryTools = (): ToolSpec<any>[] => {
   const readTool: ToolSpec<any> = {

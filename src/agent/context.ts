@@ -1,9 +1,12 @@
 import fs from "node:fs";
-import path from "node:path";
 import type { InboundMessage, ChatMessage, ChatRecord } from "../types.js";
 import type { SqliteStorage } from "../storage/sqlite.js";
 import type { Config } from "../config/schema.js";
 import type { SkillIndexEntry } from "../skills/types.js";
+import {
+  getChatMemoryRelativePath,
+  resolveWorkspacePath
+} from "../util/file.js";
 import type { RunMode } from "./run-mode.js";
 import {
   formatUserContentForRunMode,
@@ -141,13 +144,13 @@ export class ContextBuilder {
     runMode?: RunMode;
     skills: SkillIndexEntry[];
   }): { messages: ChatMessage[]; systemPrompt: string } {
-    const identityPath = path.join(this.workspaceDir, "IDENTITY.md");
-    const userPath = path.join(this.workspaceDir, "USER.md");
-    const toolsPath = path.join(this.workspaceDir, "TOOLS.md");
-    const globalMemoryPath = path.join(this.workspaceDir, "memory/MEMORY.md");
-    const chatMemoryPath = path.join(
+    const identityPath = resolveWorkspacePath(this.workspaceDir, "IDENTITY.md");
+    const userPath = resolveWorkspacePath(this.workspaceDir, "USER.md");
+    const toolsPath = resolveWorkspacePath(this.workspaceDir, "TOOLS.md");
+    const globalMemoryPath = resolveWorkspacePath(this.workspaceDir, "memory/MEMORY.md");
+    const chatMemoryPath = resolveWorkspacePath(
       this.workspaceDir,
-      `memory/${params.chat.channel}_${params.chat.chatId}.md`
+      getChatMemoryRelativePath(params.chat.channel, params.chat.chatId)
     );
 
     const identity = readIfExists(identityPath);
