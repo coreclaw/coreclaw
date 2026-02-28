@@ -39,6 +39,7 @@ export const createConfig = (
   overrides: TestConfigOverrides = {}
 ): Config => {
   const base: Config = {
+    securityProfile: "minimal",
     workspaceDir,
     dataDir,
     sqlitePath: path.join(dataDir, "bot.sqlite"),

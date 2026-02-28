@@ -38,6 +38,7 @@ export const loadConfig = (): Config => {
   const fileConfig = readJsonIfExists(configPath);
 
   const envConfig: Record<string, unknown> = {
+    securityProfile: process.env.CORECLAW_SECURITY_PROFILE,
     workspaceDir: process.env.CORECLAW_WORKSPACE,
     dataDir: process.env.CORECLAW_DATA_DIR,
     sqlitePath: process.env.CORECLAW_SQLITE_PATH,

@@ -3,6 +3,7 @@ import { z } from "zod";
 const heartbeatActiveHoursPattern = /^$|^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$/;
 
 export const ConfigSchema = z.object({
+  securityProfile: z.enum(["minimal", "hardened"]).default("minimal"),
   workspaceDir: z.string().default("workspace"),
   dataDir: z.string().default("data"),
   sqlitePath: z.string().default("data/bot.sqlite"),
@@ -127,7 +128,7 @@ export const ConfigSchema = z.object({
   webhook: z
     .object({
       enabled: z.boolean().default(false),
-      host: z.string().default("0.0.0.0"),
+      host: z.string().default("127.0.0.1"),
       port: z.number().int().min(1).max(65535).default(8788),
       path: z.string().default("/webhook"),
       authToken: z.string().optional(),

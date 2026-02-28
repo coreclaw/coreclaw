@@ -23,6 +23,7 @@ import type { Channel } from "./channels/base.js";
 import { Scheduler } from "./scheduler/scheduler.js";
 import { IsolatedToolRuntime } from "./isolation/runtime.js";
 import { HeartbeatService } from "./heartbeat/service.js";
+import { enforceSecurityProfile } from "./security/gate.js";
 import type {
   ToolContext,
   McpReloadRequest,
@@ -210,6 +211,7 @@ export const createCoreclawApp = async (
   options: CreateCoreclawAppOptions = {}
 ): Promise<CoreclawApp> => {
   const config = options.config ?? loadConfig();
+  enforceSecurityProfile(config);
   const mcpToolCallTimeoutMs = Math.max(
     5_000,
     Math.min(config.provider.timeoutMs, config.bus.processingTimeoutMs)
