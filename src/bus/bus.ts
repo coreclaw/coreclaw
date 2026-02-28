@@ -240,45 +240,69 @@ export class MessageBus {
     }
 
     let processed = 0;
-    for (const record of due) {
-      if (!this.running) {
-        break;
-      }
+    const maxWorkers = Math.max(
+      1,
+      Math.min(this.config.bus.maxConcurrentHandlers, due.length)
+    );
+    let cursor = 0;
 
-      const claimedAt = nowIso();
-      const claimed = this.storage.claimBusMessage(record.id, claimedAt);
-      if (!claimed) {
-        continue;
+    const worker = async () => {
+      while (this.running) {
+        const next = cursor;
+        cursor += 1;
+        if (next >= due.length) {
+          return;
+        }
+        const handled = await this.processRecord(direction, due[next]!);
+        processed += handled;
       }
+    };
 
-      try {
-        const message = JSON.parse(record.payload) as InboundMessage | OutboundMessage;
-        if (direction === "inbound") {
-          await withTimeout(
-            this.dispatchInbound(message as InboundMessage),
-            this.config.bus.processingTimeoutMs,
-            `Inbound handler timed out after ${this.config.bus.processingTimeoutMs}ms`
-          );
-        } else {
-          await withTimeout(
-            this.dispatchOutbound(message as OutboundMessage),
-            this.config.bus.processingTimeoutMs,
-            `Outbound handler timed out after ${this.config.bus.processingTimeoutMs}ms`
-          );
-        }
-        this.storage.markBusMessageProcessed(record.id, nowIso());
-        processed += 1;
-      } catch (error) {
-        if (error instanceof BusDeferMessageError) {
-          this.deferBusMessage(record, error);
-          continue;
-        }
-        const message = error instanceof Error ? error.message : String(error);
-        this.handleProcessingError(record, message);
-      }
-    }
+    await Promise.all(Array.from({ length: maxWorkers }, () => worker()));
 
     return processed;
+  }
+
+  private async processRecord(
+    direction: BusMessageDirection,
+    record: BusQueueRecord
+  ): Promise<number> {
+    if (!this.running) {
+      return 0;
+    }
+
+    const claimedAt = nowIso();
+    const claimed = this.storage.claimBusMessage(record.id, claimedAt);
+    if (!claimed) {
+      return 0;
+    }
+
+    try {
+      const message = JSON.parse(record.payload) as InboundMessage | OutboundMessage;
+      if (direction === "inbound") {
+        await withTimeout(
+          this.dispatchInbound(message as InboundMessage),
+          this.config.bus.processingTimeoutMs,
+          `Inbound handler timed out after ${this.config.bus.processingTimeoutMs}ms`
+        );
+      } else {
+        await withTimeout(
+          this.dispatchOutbound(message as OutboundMessage),
+          this.config.bus.processingTimeoutMs,
+          `Outbound handler timed out after ${this.config.bus.processingTimeoutMs}ms`
+        );
+      }
+      this.storage.markBusMessageProcessed(record.id, nowIso());
+      return 1;
+    } catch (error) {
+      if (error instanceof BusDeferMessageError) {
+        this.deferBusMessage(record, error);
+        return 0;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      this.handleProcessingError(record, message);
+      return 0;
+    }
   }
 
   private async dispatchInbound(message: InboundMessage) {

@@ -492,3 +492,55 @@ test("MessageBus enforces per-chat inbound rate limit", async () => {
     fixture.cleanup();
   }
 });
+
+test("MessageBus processes inbound messages concurrently up to configured limit", async () => {
+  const fixture = createStorageFixture({
+    bus: {
+      pollMs: 20,
+      batchSize: 10,
+      maxConcurrentHandlers: 2,
+      maxAttempts: 3,
+      retryBackoffMs: 10,
+      maxRetryBackoffMs: 100,
+      processingTimeoutMs: 500
+    }
+  });
+
+  const bus = new MessageBus(fixture.storage, fixture.config);
+  try {
+    const startedAt: number[] = [];
+    bus.onInbound(async () => {
+      startedAt.push(Date.now());
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    });
+
+    bus.publishInbound({
+      id: "conc-1",
+      channel: "cli",
+      chatId: "a",
+      senderId: "user",
+      content: "one",
+      createdAt: new Date().toISOString()
+    });
+    bus.publishInbound({
+      id: "conc-2",
+      channel: "cli",
+      chatId: "b",
+      senderId: "user",
+      content: "two",
+      createdAt: new Date().toISOString()
+    });
+
+    bus.start();
+    await waitUntil(() => startedAt.length >= 2);
+
+    const spreadMs = Math.abs(startedAt[0]! - startedAt[1]!);
+    assert.ok(
+      spreadMs < 80,
+      `expected concurrent handler start, but observed spread ${spreadMs}ms`
+    );
+  } finally {
+    bus.stop();
+    fixture.cleanup();
+  }
+});

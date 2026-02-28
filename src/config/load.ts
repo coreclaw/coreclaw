@@ -107,6 +107,9 @@ export const loadConfig = (): Config => {
       batchSize: process.env.CORECLAW_BUS_BATCH_SIZE
         ? Number(process.env.CORECLAW_BUS_BATCH_SIZE)
         : undefined,
+      maxConcurrentHandlers: process.env.CORECLAW_BUS_MAX_CONCURRENCY
+        ? Number(process.env.CORECLAW_BUS_MAX_CONCURRENCY)
+        : undefined,
       maxAttempts: process.env.CORECLAW_BUS_MAX_ATTEMPTS
         ? Number(process.env.CORECLAW_BUS_MAX_ATTEMPTS)
         : undefined,

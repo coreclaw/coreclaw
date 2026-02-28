@@ -83,6 +83,7 @@ export const createConfig = (
     bus: {
       pollMs: 50,
       batchSize: 20,
+      maxConcurrentHandlers: 4,
       maxAttempts: 3,
       retryBackoffMs: 20,
       maxRetryBackoffMs: 200,

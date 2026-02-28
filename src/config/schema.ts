@@ -64,6 +64,7 @@ export const ConfigSchema = z.object({
     .object({
       pollMs: z.number().int().min(10).default(1_000),
       batchSize: z.number().int().min(1).max(500).default(50),
+      maxConcurrentHandlers: z.number().int().min(1).max(128).default(4),
       maxAttempts: z.number().int().min(1).max(20).default(5),
       retryBackoffMs: z.number().int().min(50).default(1_000),
       maxRetryBackoffMs: z.number().int().min(100).default(60_000),
