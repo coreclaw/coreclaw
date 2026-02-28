@@ -51,6 +51,9 @@ export const getChatMemoryRelativePath = (channel: string, chatId: string) => {
   return `memory/${safeChannel}_${safeChatId}.md`;
 };
 
+export const getLegacyChatMemoryRelativePath = (channel: string, chatId: string) =>
+  `memory/${channel}_${chatId}.md`;
+
 export const resolveWorkspacePath = (workspaceDir: string, targetPath: string) => {
   const { absoluteRoot, realRoot } = resolveWorkspaceRoot(workspaceDir);
   const absoluteTarget = path.resolve(absoluteRoot, targetPath);
@@ -67,4 +70,31 @@ export const resolveWorkspacePath = (workspaceDir: string, targetPath: string) =
   const realAncestor = fs.realpathSync(existingAncestor);
   ensureWithinRoot(realRoot, realAncestor);
   return absoluteTarget;
+};
+
+export const resolveChatMemoryPath = (
+  workspaceDir: string,
+  channel: string,
+  chatId: string
+) => {
+  const preferredRelativePath = getChatMemoryRelativePath(channel, chatId);
+  const preferredPath = resolveWorkspacePath(workspaceDir, preferredRelativePath);
+  if (fs.existsSync(preferredPath)) {
+    return preferredPath;
+  }
+
+  const legacyRelativePath = getLegacyChatMemoryRelativePath(channel, chatId);
+  if (legacyRelativePath === preferredRelativePath) {
+    return preferredPath;
+  }
+
+  try {
+    const legacyPath = resolveWorkspacePath(workspaceDir, legacyRelativePath);
+    if (fs.existsSync(legacyPath)) {
+      return legacyPath;
+    }
+  } catch {
+    // Legacy chat id format may be unsafe (traversal/symlink); keep preferred path.
+  }
+  return preferredPath;
 };

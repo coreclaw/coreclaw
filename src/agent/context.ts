@@ -4,7 +4,7 @@ import type { SqliteStorage } from "../storage/sqlite.js";
 import type { Config } from "../config/schema.js";
 import type { SkillIndexEntry } from "../skills/types.js";
 import {
-  getChatMemoryRelativePath,
+  resolveChatMemoryPath,
   resolveWorkspacePath
 } from "../util/file.js";
 import type { RunMode } from "./run-mode.js";
@@ -169,9 +169,10 @@ export class ContextBuilder {
     const userPath = resolveWorkspacePath(this.workspaceDir, "USER.md");
     const toolsPath = resolveWorkspacePath(this.workspaceDir, "TOOLS.md");
     const globalMemoryPath = resolveWorkspacePath(this.workspaceDir, "memory/MEMORY.md");
-    const chatMemoryPath = resolveWorkspacePath(
+    const chatMemoryPath = resolveChatMemoryPath(
       this.workspaceDir,
-      getChatMemoryRelativePath(params.chat.channel, params.chat.chatId)
+      params.chat.channel,
+      params.chat.chatId
     );
 
     const identity = readIfExists(identityPath);
