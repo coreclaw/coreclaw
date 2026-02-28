@@ -6,23 +6,18 @@ import type { MessageBus } from "../bus/bus.js";
 import type { Logger } from "pino";
 import type { Channel } from "./base.js";
 import { isChannelIdentityAllowed } from "./allowlist.js";
-
-type OutboundEnvelope = {
-  id: string;
-  chatId: string;
-  content: string;
-  createdAt: string;
-};
+import type { SqliteStorage } from "../storage/sqlite.js";
 
 export class WebhookChannel implements Channel {
   readonly name = "webhook";
   private bus: MessageBus | null = null;
   private logger: Logger | null = null;
   private server: http.Server | null = null;
-  private outbox = new Map<string, OutboundEnvelope[]>();
-  private outboxTouchedAtMs = new Map<string, number>();
 
-  constructor(private config: Config) {}
+  constructor(
+    private config: Config,
+    private storage: SqliteStorage
+  ) {}
 
   async start(bus: MessageBus, logger: Logger) {
     this.bus = bus;
@@ -89,27 +84,17 @@ export class WebhookChannel implements Channel {
     await new Promise<void>((resolve) => {
       server.close(() => resolve());
     });
-    this.outbox.clear();
-    this.outboxTouchedAtMs.clear();
   }
 
   async send(payload: { chatId: string; content: string }) {
-    const nowMs = Date.now();
-    this.pruneOutbox(nowMs);
-
-    const queue = this.outbox.get(payload.chatId) ?? [];
-    queue.push({
-      id: newId(),
+    this.storage.enqueueWebhookOutboxMessage({
       chatId: payload.chatId,
       content: payload.content,
-      createdAt: nowIso()
+      createdAt: nowIso(),
+      maxPerChat: this.config.webhook.outboxMaxPerChat,
+      maxChats: this.config.webhook.outboxMaxChats,
+      chatTtlMs: this.config.webhook.outboxChatTtlMs
     });
-    if (queue.length > this.config.webhook.outboxMaxPerChat) {
-      queue.splice(0, queue.length - this.config.webhook.outboxMaxPerChat);
-    }
-    this.outbox.set(payload.chatId, queue);
-    this.touchOutboxChat(payload.chatId, nowMs);
-    this.pruneOutbox(nowMs);
   }
 
   private normalizePath(pathValue: string) {
@@ -128,45 +113,6 @@ export class WebhookChannel implements Channel {
     const bearer = header?.startsWith("Bearer ") ? header.slice(7) : undefined;
     const token = bearer ?? (req.headers["x-coreclaw-token"] as string | undefined);
     return token === expected;
-  }
-
-  private touchOutboxChat(chatId: string, atMs: number) {
-    this.outboxTouchedAtMs.set(chatId, atMs);
-  }
-
-  private deleteOutboxChat(chatId: string) {
-    this.outbox.delete(chatId);
-    this.outboxTouchedAtMs.delete(chatId);
-  }
-
-  private pruneOutbox(nowMs: number) {
-    if (this.outbox.size === 0) {
-      return;
-    }
-
-    const ttlMs = this.config.webhook.outboxChatTtlMs;
-    for (const [chatId] of this.outbox.entries()) {
-      const touchedAt = this.outboxTouchedAtMs.get(chatId) ?? 0;
-      if (nowMs - touchedAt > ttlMs) {
-        this.deleteOutboxChat(chatId);
-      }
-    }
-
-    const maxChats = this.config.webhook.outboxMaxChats;
-    if (this.outbox.size <= maxChats) {
-      return;
-    }
-
-    const byLeastRecent = [...this.outbox.entries()]
-      .map(([chatId]) => ({ chatId, touchedAt: this.outboxTouchedAtMs.get(chatId) ?? 0 }))
-      .sort((a, b) => a.touchedAt - b.touchedAt);
-
-    for (const item of byLeastRecent) {
-      if (this.outbox.size <= maxChats) {
-        break;
-      }
-      this.deleteOutboxChat(item.chatId);
-    }
   }
 
   private async handleInbound(
@@ -225,9 +171,6 @@ export class WebhookChannel implements Channel {
   }
 
   private handleOutboundPull(url: URL, res: http.ServerResponse<http.IncomingMessage>) {
-    const nowMs = Date.now();
-    this.pruneOutbox(nowMs);
-
     const chatId = url.searchParams.get("chatId")?.trim() ?? "";
     if (!chatId) {
       res.writeHead(400, { "content-type": "application/json" });
@@ -238,20 +181,13 @@ export class WebhookChannel implements Channel {
     const limit = Number.isFinite(limitRaw)
       ? Math.min(Math.max(Math.floor(limitRaw), 1), 200)
       : 50;
-    const queue = this.outbox.get(chatId) ?? [];
-    if (queue.length > 0) {
-      this.touchOutboxChat(chatId, nowMs);
-    }
-    const batch = queue.slice(0, limit);
-    if (batch.length > 0) {
-      queue.splice(0, batch.length);
-      if (queue.length === 0) {
-        this.deleteOutboxChat(chatId);
-      } else {
-        this.outbox.set(chatId, queue);
-        this.touchOutboxChat(chatId, nowMs);
-      }
-    }
+    const batch = this.storage.pullWebhookOutboxMessages({
+      chatId,
+      limit,
+      now: nowIso(),
+      maxChats: this.config.webhook.outboxMaxChats,
+      chatTtlMs: this.config.webhook.outboxChatTtlMs
+    });
 
     res.writeHead(200, { "content-type": "application/json" });
     res.end(

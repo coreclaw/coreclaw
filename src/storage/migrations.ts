@@ -152,5 +152,25 @@ export const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_audit_events_type ON audit_events(event_type, at DESC);
       CREATE INDEX IF NOT EXISTS idx_audit_events_chat ON audit_events(channel, chat_id, at DESC);
     `
+  },
+  {
+    id: 7,
+    sql: `
+      CREATE TABLE IF NOT EXISTS webhook_outbox (
+        id TEXT PRIMARY KEY,
+        chat_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_webhook_outbox_chat_created
+        ON webhook_outbox(chat_id, created_at, id);
+
+      CREATE TABLE IF NOT EXISTS webhook_outbox_chats (
+        chat_id TEXT PRIMARY KEY,
+        touched_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_webhook_outbox_chats_touched
+        ON webhook_outbox_chats(touched_at, chat_id);
+    `
   }
 ];

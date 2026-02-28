@@ -551,6 +551,85 @@ export class SqliteStorage {
     return counts;
   }
 
+  enqueueWebhookOutboxMessage(params: {
+    chatId: string;
+    content: string;
+    createdAt: string;
+    maxPerChat: number;
+    maxChats: number;
+    chatTtlMs: number;
+  }): { id: string; chatId: string; content: string; createdAt: string } {
+    const run = this.db.transaction(() => {
+      const id = newId();
+      this.db
+        .prepare(
+          "INSERT INTO webhook_outbox(id, chat_id, content, created_at) VALUES(?,?,?,?)"
+        )
+        .run(id, params.chatId, params.content, params.createdAt);
+      this.upsertWebhookOutboxChatTouchedAt(params.chatId, params.createdAt);
+      this.trimWebhookOutboxPerChat(params.chatId, params.maxPerChat);
+      this.pruneWebhookOutboxChats(params.createdAt, params.maxChats, params.chatTtlMs);
+      return {
+        id,
+        chatId: params.chatId,
+        content: params.content,
+        createdAt: params.createdAt
+      };
+    });
+    return run();
+  }
+
+  pullWebhookOutboxMessages(params: {
+    chatId: string;
+    limit: number;
+    now: string;
+    maxChats: number;
+    chatTtlMs: number;
+  }): Array<{ id: string; chatId: string; content: string; createdAt: string }> {
+    const run = this.db.transaction(() => {
+      this.pruneWebhookOutboxChats(params.now, params.maxChats, params.chatTtlMs);
+      const rows = this.db
+        .prepare(
+          "SELECT id, chat_id, content, created_at FROM webhook_outbox WHERE chat_id = ? ORDER BY created_at ASC, id ASC LIMIT ?"
+        )
+        .all(params.chatId, params.limit) as Array<{
+        id: string;
+        chat_id: string;
+        content: string;
+        created_at: string;
+      }>;
+      if (rows.length === 0) {
+        return [];
+      }
+
+      const ids = rows.map((row) => row.id);
+      const placeholders = ids.map(() => "?").join(",");
+      this.db
+        .prepare(`DELETE FROM webhook_outbox WHERE id IN (${placeholders})`)
+        .run(...ids);
+
+      const remaining = this.db
+        .prepare("SELECT COUNT(*) as count FROM webhook_outbox WHERE chat_id = ?")
+        .get(params.chatId) as { count: number };
+      if ((remaining?.count ?? 0) > 0) {
+        this.upsertWebhookOutboxChatTouchedAt(params.chatId, params.now);
+      } else {
+        this.db
+          .prepare("DELETE FROM webhook_outbox_chats WHERE chat_id = ?")
+          .run(params.chatId);
+      }
+      this.pruneWebhookOutboxChats(params.now, params.maxChats, params.chatTtlMs);
+
+      return rows.map((row) => ({
+        id: row.id,
+        chatId: row.chat_id,
+        content: row.content,
+        createdAt: row.created_at
+      }));
+    });
+    return run();
+  }
+
   listDeadLetterBusMessages(direction?: BusMessageDirection, limit = 100): BusQueueRecord[] {
     const rows = (direction
       ? this.db
@@ -1287,6 +1366,56 @@ export class SqliteStorage {
 
   close() {
     this.db.close();
+  }
+
+  private upsertWebhookOutboxChatTouchedAt(chatId: string, touchedAt: string) {
+    this.db
+      .prepare(
+        "INSERT INTO webhook_outbox_chats(chat_id, touched_at) VALUES(?, ?) ON CONFLICT(chat_id) DO UPDATE SET touched_at = excluded.touched_at"
+      )
+      .run(chatId, touchedAt);
+  }
+
+  private trimWebhookOutboxPerChat(chatId: string, maxPerChat: number) {
+    const overflow = this.db
+      .prepare(
+        "SELECT id FROM webhook_outbox WHERE chat_id = ? ORDER BY created_at DESC, id DESC LIMIT -1 OFFSET ?"
+      )
+      .all(chatId, maxPerChat) as Array<{ id: string }>;
+    if (overflow.length === 0) {
+      return;
+    }
+    const ids = overflow.map((row) => row.id);
+    const placeholders = ids.map(() => "?").join(",");
+    this.db
+      .prepare(`DELETE FROM webhook_outbox WHERE id IN (${placeholders})`)
+      .run(...ids);
+  }
+
+  private deleteWebhookOutboxChat(chatId: string) {
+    this.db.prepare("DELETE FROM webhook_outbox WHERE chat_id = ?").run(chatId);
+    this.db.prepare("DELETE FROM webhook_outbox_chats WHERE chat_id = ?").run(chatId);
+  }
+
+  private pruneWebhookOutboxChats(now: string, maxChats: number, chatTtlMs: number) {
+    const expireBefore = new Date(new Date(now).getTime() - chatTtlMs).toISOString();
+    const stale = this.db
+      .prepare(
+        "SELECT chat_id FROM webhook_outbox_chats WHERE touched_at <= ? ORDER BY touched_at ASC, chat_id ASC"
+      )
+      .all(expireBefore) as Array<{ chat_id: string }>;
+    for (const row of stale) {
+      this.deleteWebhookOutboxChat(row.chat_id);
+    }
+
+    const overflow = this.db
+      .prepare(
+        "SELECT chat_id FROM webhook_outbox_chats ORDER BY touched_at DESC, chat_id DESC LIMIT -1 OFFSET ?"
+      )
+      .all(maxChats) as Array<{ chat_id: string }>;
+    for (const row of overflow) {
+      this.deleteWebhookOutboxChat(row.chat_id);
+    }
   }
 
   private mapChatRow(row: {

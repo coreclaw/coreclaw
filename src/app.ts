@@ -140,7 +140,7 @@ export class CoreclawApp {
       await cli.start(this.bus, this.logger);
     }
     if (this.config.webhook.enabled) {
-      const webhook = new WebhookChannel(this.config);
+      const webhook = new WebhookChannel(this.config, this.storage);
       this.channels.push(webhook);
       await webhook.start(this.bus, this.logger);
     }

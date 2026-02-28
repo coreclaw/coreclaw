@@ -56,7 +56,7 @@ test("WebhookChannel accepts inbound POST and publishes bus message", async () =
   });
 
   const bus = new MessageBus(fixture.storage, fixture.config, logger);
-  const channel = new WebhookChannel(fixture.config);
+  const channel = new WebhookChannel(fixture.config, fixture.storage);
   const inbound: Array<{ id: string; chatId: string; content: string; channel: string }> = [];
 
   try {
@@ -113,7 +113,7 @@ test("WebhookChannel stores outbound messages and supports pull API", async () =
   });
 
   const bus = new MessageBus(fixture.storage, fixture.config, logger);
-  const channel = new WebhookChannel(fixture.config);
+  const channel = new WebhookChannel(fixture.config, fixture.storage);
 
   try {
     await channel.start(bus, logger);
@@ -153,6 +153,45 @@ test("WebhookChannel stores outbound messages and supports pull API", async () =
   }
 });
 
+test("WebhookChannel preserves outbound messages across channel restart", async () => {
+  const fixture = createStorageFixture({
+    webhook: {
+      enabled: true,
+      host: "127.0.0.1",
+      port: await getFreePort(),
+      path: "/restart",
+      authToken: undefined
+    }
+  });
+
+  const bus = new MessageBus(fixture.storage, fixture.config, logger);
+  const first = new WebhookChannel(fixture.config, fixture.storage);
+  const second = new WebhookChannel(fixture.config, fixture.storage);
+
+  try {
+    await first.start(bus, logger);
+    await first.send({
+      chatId: "chat-restart",
+      content: "persisted"
+    });
+    await first.stop();
+
+    await second.start(bus, logger);
+    const res = await fetch(
+      `http://${fixture.config.webhook.host}:${fixture.config.webhook.port}${fixture.config.webhook.path}/outbound?chatId=chat-restart&limit=10`
+    );
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+      messages: Array<{ content: string }>;
+    };
+    assert.equal(body.messages.length, 1);
+    assert.equal(body.messages[0]?.content, "persisted");
+  } finally {
+    await second.stop();
+    fixture.cleanup();
+  }
+});
+
 test("WebhookChannel enforces auth token when configured", async () => {
   const fixture = createStorageFixture({
     webhook: {
@@ -165,7 +204,7 @@ test("WebhookChannel enforces auth token when configured", async () => {
   });
 
   const bus = new MessageBus(fixture.storage, fixture.config, logger);
-  const channel = new WebhookChannel(fixture.config);
+  const channel = new WebhookChannel(fixture.config, fixture.storage);
 
   try {
     await channel.start(bus, logger);
@@ -214,7 +253,7 @@ test("WebhookChannel enforces configured channel identity allowlist", async () =
   });
 
   const bus = new MessageBus(fixture.storage, fixture.config, logger);
-  const channel = new WebhookChannel(fixture.config);
+  const channel = new WebhookChannel(fixture.config, fixture.storage);
 
   try {
     await channel.start(bus, logger);
@@ -266,7 +305,7 @@ test("WebhookChannel evicts least-recent chats when outbox chat cap is exceeded"
   });
 
   const bus = new MessageBus(fixture.storage, fixture.config, logger);
-  const channel = new WebhookChannel(fixture.config);
+  const channel = new WebhookChannel(fixture.config, fixture.storage);
 
   try {
     await channel.start(bus, logger);
@@ -318,7 +357,7 @@ test("WebhookChannel expires inactive outbox chats by TTL", async () => {
   });
 
   const bus = new MessageBus(fixture.storage, fixture.config, logger);
-  const channel = new WebhookChannel(fixture.config);
+  const channel = new WebhookChannel(fixture.config, fixture.storage);
 
   try {
     await channel.start(bus, logger);
