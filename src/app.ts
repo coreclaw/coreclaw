@@ -16,6 +16,7 @@ import { ToolRegistry } from "./tools/registry.js";
 import { DefaultToolPolicyEngine } from "./tools/policy.js";
 import { builtInTools } from "./tools/builtins/index.js";
 import { McpManager } from "./mcp/manager.js";
+import { readMcpConfigFile } from "./mcp/config.js";
 import { SkillLoader } from "./skills/loader.js";
 import { ProfileRuntimeRegistry } from "./profiles/runtime.js";
 import { CliChannel } from "./channels/cli.js";
@@ -30,6 +31,9 @@ import type {
   McpReloadRequest,
   McpReloadResult
 } from "./tools/registry.js";
+import { discoverWorkclawPacks } from "./packs/discovery.js";
+import { loadProfilePackGraph, buildEffectiveMcpConfig } from "./packs/loader.js";
+import { recordDiscoveredPackInstall, enablePackForProfile } from "./packs/install.js";
 
 const ensureDir = (dir: string) => {
   fs.mkdirSync(dir, { recursive: true });
@@ -229,6 +233,15 @@ export const createCoreclawApp = async (
   storage.init();
 
   const skillLoader = new SkillLoader(config.skillsDir);
+  const discoveredPacks = discoverWorkclawPacks(config);
+  for (const pack of discoveredPacks) {
+    recordDiscoveredPackInstall(storage, pack);
+  }
+  for (const profile of profileRegistry.list()) {
+    for (const packId of profile.enabledPackIds) {
+      enablePackForProfile(storage, profile.id, packId);
+    }
+  }
 
   const mcpManager = new McpManager({
     logger,
@@ -237,7 +250,8 @@ export const createCoreclawApp = async (
   });
   const isolatedRuntime = new IsolatedToolRuntime(config, logger);
   const toolRegistry = new ToolRegistry(new DefaultToolPolicyEngine(), telemetry);
-  const mcpConfigPath = path.resolve(config.mcpConfigPath);
+  const baseMcpConfigPath = path.resolve(config.mcpConfigPath);
+  const effectiveMcpConfigPath = path.resolve(config.dataDir, "workclaw.mcp.runtime.json");
   let mcpConfigSignature: string | null = null;
   let mcpSyncInFlight: Promise<McpReloadResult> | null = null;
   let mcpFailureStreak = 0;
@@ -245,10 +259,55 @@ export const createCoreclawApp = async (
   let mcpNextRetryAtMs = 0;
   let mcpCircuitOpenUntilMs = 0;
 
+  const listSkillsForProfile = (profileId = "main") => {
+    const packState = loadProfilePackGraph(
+      storage,
+      discoveredPacks.filter((pack) => pack.allowed),
+      profileId,
+      { strict: config.packs.strict }
+    );
+    const roots = [config.skillsDir, ...packState.skillRoots];
+    return new SkillLoader(roots).listSkills();
+  };
+
+  const listPackMcpFragments = () => {
+    const fragments = new Set<string>();
+    for (const profile of profileRegistry.list()) {
+      const graph = loadProfilePackGraph(
+        storage,
+        discoveredPacks.filter((pack) => pack.allowed),
+        profile.id,
+        {
+          strict: config.packs.strict
+        }
+      );
+      for (const fragment of graph.mcpFragments) {
+        fragments.add(fragment);
+      }
+    }
+    return [...fragments.values()].sort();
+  };
+
+  const materializeEffectiveMcpConfig = () => {
+    const graphs = profileRegistry.list().map((profile) =>
+      loadProfilePackGraph(storage, discoveredPacks.filter((pack) => pack.allowed), profile.id, {
+        strict: config.packs.strict
+      })
+    );
+    const merged = buildEffectiveMcpConfig(readMcpConfigFile(baseMcpConfigPath), graphs);
+    fs.writeFileSync(effectiveMcpConfigPath, JSON.stringify(merged, null, 2), "utf-8");
+    return effectiveMcpConfigPath;
+  };
+
   const readMcpConfigSignature = () => {
     try {
-      const stat = fs.statSync(mcpConfigPath);
-      return `present:${stat.mtimeMs}:${stat.size}`;
+      const inputs = [baseMcpConfigPath, ...listPackMcpFragments()]
+        .filter((entry) => fs.existsSync(entry))
+        .map((entry) => {
+          const stat = fs.statSync(entry);
+          return `${entry}:${stat.mtimeMs}:${stat.size}`;
+        });
+      return inputs.length > 0 ? `present:${inputs.join("|")}` : "missing";
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return "missing";
@@ -386,7 +445,7 @@ export const createCoreclawApp = async (
 
     mcpSyncInFlight = (async () => {
       try {
-        const defs = await mcpManager.reloadFromConfig(mcpConfigPath);
+          const defs = await mcpManager.reloadFromConfig(materializeEffectiveMcpConfig());
         toolRegistry.replaceRawByPrefix(
           "mcp__",
           defs,
@@ -516,7 +575,7 @@ export const createCoreclawApp = async (
     bus,
     logger,
     config,
-    () => skillLoader.listSkills(),
+    (profileId) => listSkillsForProfile(profileId),
     isolatedRuntime,
     mcpReloader,
     heartbeatService,

@@ -84,7 +84,7 @@ export class ConversationRouter {
     private bus: MessageBus,
     private logger: Logger,
     private config: Config,
-    private skills: SkillIndexEntry[] | (() => SkillIndexEntry[]),
+    private skills: SkillIndexEntry[] | ((profileId?: string) => SkillIndexEntry[]),
     private isolatedRuntime?: IsolatedToolRuntime,
     private mcpReloader?: (params?: McpReloadRequest) => Promise<McpReloadResult>,
     private heartbeatController?: HeartbeatController,
@@ -191,7 +191,7 @@ export class ConversationRouter {
       }
     }
 
-    const skills = this.resolveSkills();
+    const skills = this.resolveSkills(chat.profileId);
     const runMode = resolveRunMode(message);
 
     const executionNow = nowIso();
@@ -416,8 +416,8 @@ export class ConversationRouter {
     return this.storage.getChat(message.channel, message.chatId)?.profileId ?? "main";
   }
 
-  private resolveSkills(): SkillIndexEntry[] {
-    const resolved = typeof this.skills === "function" ? this.skills() : this.skills;
+  private resolveSkills(profileId?: string): SkillIndexEntry[] {
+    const resolved = typeof this.skills === "function" ? this.skills(profileId) : this.skills;
     return [...resolved];
   }
 

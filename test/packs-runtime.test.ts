@@ -1,0 +1,84 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { SkillLoader } from "../src/skills/loader.js";
+import { buildEffectiveMcpConfig, loadProfilePackGraph } from "../src/packs/loader.js";
+import { enablePackForProfile, recordDiscoveredPackInstall } from "../src/packs/install.js";
+import { createStorageFixture } from "./test-utils.js";
+
+test("pack-enabled skill roots become visible to SkillLoader", () => {
+  const fixture = createStorageFixture();
+  try {
+    const packRoot = path.join(fixture.rootDir, "packs", "engineering-common");
+    const skillRoot = path.join(packRoot, "skills");
+    fs.mkdirSync(path.join(skillRoot, "pack-skill"), { recursive: true });
+    fs.writeFileSync(
+      path.join(skillRoot, "pack-skill", "SKILL.md"),
+      `---\nname: pack-skill\ndescription: from pack\nalways: false\n---\n# Pack Skill`,
+      "utf-8"
+    );
+    const discovered = {
+      id: "engineering-common",
+      rootDir: packRoot,
+      sourceRoot: path.join(fixture.rootDir, "packs"),
+      manifestPath: path.join(packRoot, "workclaw.pack.json"),
+      manifest: {
+        id: "engineering-common",
+        type: "role-pack" as const,
+        description: "base",
+        skills: ["skills"]
+      },
+      skillRoots: [skillRoot],
+      mcpFragments: [],
+      templateRoots: [],
+      bootstrapEntries: [],
+      allowed: true,
+      warnings: []
+    };
+    recordDiscoveredPackInstall(fixture.storage, discovered);
+    enablePackForProfile(fixture.storage, "main", "engineering-common");
+    const loaded = loadProfilePackGraph(fixture.storage, [discovered], "main");
+    const skills = new SkillLoader([fixture.config.skillsDir, ...loaded.skillRoots]).listSkills();
+    assert.ok(skills.some((skill) => skill.name === "pack-skill"));
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("pack MCP fragments merge into effective runtime MCP config", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-pack-mcp-"));
+  try {
+    const fragmentDir = path.join(root, "mcp");
+    fs.mkdirSync(fragmentDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(fragmentDir, "gitlab.json"),
+      JSON.stringify({
+        servers: {
+          gitlab: {
+            command: "npx",
+            args: ["-y", "@modelcontextprotocol/server-gitlab"]
+          }
+        }
+      }),
+      "utf-8"
+    );
+
+    const merged = buildEffectiveMcpConfig(
+      {
+        servers: {
+          base: {
+            command: "node",
+            args: ["base.js"]
+          }
+        }
+      },
+      [{ mcpFragments: [fragmentDir] }]
+    );
+
+    assert.deepEqual(Object.keys(merged.servers).sort(), ["base", "gitlab"]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

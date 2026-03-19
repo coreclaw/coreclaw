@@ -35,31 +35,42 @@ const extractFrontmatter = (content: string): { meta: SkillMeta | null; body: st
 };
 
 export class SkillLoader {
-  constructor(private skillsDir: string) {}
+  private readonly skillsDirs: string[];
+
+  constructor(skillsDir: string | string[]) {
+    this.skillsDirs = Array.isArray(skillsDir) ? skillsDir : [skillsDir];
+  }
 
   listSkills(): SkillIndexEntry[] {
-    if (!fs.existsSync(this.skillsDir)) {
-      return [];
-    }
-    const entries = fs
-      .readdirSync(this.skillsDir, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory());
     const skills: SkillIndexEntry[] = [];
-    for (const entry of entries) {
-      const skillPath = path.join(this.skillsDir, entry.name, "SKILL.md");
-      if (!fs.existsSync(skillPath)) {
+    const seenNames = new Set<string>();
+    for (const skillsDir of this.skillsDirs) {
+      if (!fs.existsSync(skillsDir)) {
         continue;
       }
-      const content = fs.readFileSync(skillPath, "utf-8");
-      const { meta } = extractFrontmatter(content);
-      if (!meta || !meta.name) {
-        continue;
+      const entries = fs
+        .readdirSync(skillsDir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory());
+      for (const entry of entries) {
+        const skillPath = path.join(skillsDir, entry.name, "SKILL.md");
+        if (!fs.existsSync(skillPath)) {
+          continue;
+        }
+        const content = fs.readFileSync(skillPath, "utf-8");
+        const { meta } = extractFrontmatter(content);
+        if (!meta || !meta.name) {
+          continue;
+        }
+        if (seenNames.has(meta.name)) {
+          throw new Error(`Duplicate skill name discovered across roots: ${meta.name}`);
+        }
+        seenNames.add(meta.name);
+        skills.push({
+          ...meta,
+          dir: path.join(skillsDir, entry.name),
+          skillPath
+        });
       }
-      skills.push({
-        ...meta,
-        dir: path.join(this.skillsDir, entry.name),
-        skillPath
-      });
     }
     return skills;
   }
