@@ -46,6 +46,25 @@ export type ProfileRecord = {
   updatedAt: string;
 };
 
+export type PackInstallRecord = {
+  packId: string;
+  version: string | null;
+  sourceKind: string;
+  sourcePath: string | null;
+  installState: string;
+  manifestJson: string;
+  installedAt: string;
+  updatedAt: string;
+};
+
+export type ProfilePackEnablementRecord = {
+  profileId: string;
+  packId: string;
+  enabled: boolean;
+  source: "direct" | "inherited" | "team";
+  enabledAt: string;
+};
+
 export type ConversationState = {
   chatFk: string;
   summary: string;

@@ -194,5 +194,32 @@ export const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_chats_profile_channel_chat
         ON chats(profile_id, channel, chat_id);
     `
+  },
+  {
+    id: 9,
+    sql: `
+      CREATE TABLE IF NOT EXISTS pack_installs (
+        pack_id TEXT PRIMARY KEY,
+        version TEXT,
+        source_kind TEXT NOT NULL,
+        source_path TEXT,
+        install_state TEXT NOT NULL,
+        manifest_json TEXT NOT NULL,
+        installed_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS profile_pack_enablements (
+        profile_id TEXT NOT NULL,
+        pack_id TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        source TEXT NOT NULL,
+        enabled_at TEXT NOT NULL,
+        PRIMARY KEY(profile_id, pack_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_profile_pack_enablements_pack
+        ON profile_pack_enablements(pack_id);
+    `
   }
 ];

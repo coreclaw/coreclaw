@@ -9,7 +9,9 @@ import type {
   ChatRecord,
   ConversationState,
   InboundMessage,
+  PackInstallRecord,
   ProfileRecord,
+  ProfilePackEnablementRecord,
   TaskRunRecord,
   TaskRecord
 } from "../types.js";
@@ -1035,6 +1037,124 @@ export class SqliteStorage {
     return rows.map((row) => this.mapProfileRow(row));
   }
 
+  upsertPackInstall(params: {
+    packId: string;
+    version?: string | null;
+    sourceKind: string;
+    sourcePath?: string | null;
+    installState: string;
+    manifestJson: string;
+    installedAt?: string;
+    updatedAt?: string;
+  }): PackInstallRecord {
+    const installedAt = params.installedAt ?? nowIso();
+    const updatedAt = params.updatedAt ?? installedAt;
+    this.db
+      .prepare(
+        "INSERT INTO pack_installs(pack_id, version, source_kind, source_path, install_state, manifest_json, installed_at, updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(pack_id) DO UPDATE SET version=excluded.version, source_kind=excluded.source_kind, source_path=excluded.source_path, install_state=excluded.install_state, manifest_json=excluded.manifest_json, updated_at=excluded.updated_at"
+      )
+      .run(
+        params.packId,
+        params.version ?? null,
+        params.sourceKind,
+        params.sourcePath ?? null,
+        params.installState,
+        params.manifestJson,
+        installedAt,
+        updatedAt
+      );
+    return this.getPackInstall(params.packId)!;
+  }
+
+  getPackInstall(packId: string): PackInstallRecord | null {
+    const row = this.db
+      .prepare("SELECT * FROM pack_installs WHERE pack_id = ?")
+      .get(packId) as
+      | {
+          pack_id: string;
+          version: string | null;
+          source_kind: string;
+          source_path: string | null;
+          install_state: string;
+          manifest_json: string;
+          installed_at: string;
+          updated_at: string;
+        }
+      | undefined;
+    return row ? this.mapPackInstallRow(row) : null;
+  }
+
+  listPackInstalls(limit = 200): PackInstallRecord[] {
+    const rows = this.db
+      .prepare("SELECT * FROM pack_installs ORDER BY pack_id ASC LIMIT ?")
+      .all(limit) as Array<{
+      pack_id: string;
+      version: string | null;
+      source_kind: string;
+      source_path: string | null;
+      install_state: string;
+      manifest_json: string;
+      installed_at: string;
+      updated_at: string;
+    }>;
+    return rows.map((row) => this.mapPackInstallRow(row));
+  }
+
+  enablePackForProfile(params: {
+    profileId: string;
+    packId: string;
+    source?: "direct" | "inherited" | "team";
+    enabledAt?: string;
+  }): ProfilePackEnablementRecord {
+    const enabledAt = params.enabledAt ?? nowIso();
+    this.db
+      .prepare(
+        "INSERT INTO profile_pack_enablements(profile_id, pack_id, enabled, source, enabled_at) VALUES(?,?,?,?,?) ON CONFLICT(profile_id, pack_id) DO UPDATE SET enabled=excluded.enabled, source=excluded.source, enabled_at=excluded.enabled_at"
+      )
+      .run(params.profileId, params.packId, 1, params.source ?? "direct", enabledAt);
+    return this.getProfilePackEnablement(params.profileId, params.packId)!;
+  }
+
+  disablePackForProfile(profileId: string, packId: string): void {
+    this.db
+      .prepare("DELETE FROM profile_pack_enablements WHERE profile_id = ? AND pack_id = ?")
+      .run(profileId, packId);
+  }
+
+  getProfilePackEnablement(profileId: string, packId: string): ProfilePackEnablementRecord | null {
+    const row = this.db
+      .prepare("SELECT * FROM profile_pack_enablements WHERE profile_id = ? AND pack_id = ?")
+      .get(profileId, packId) as
+      | {
+          profile_id: string;
+          pack_id: string;
+          enabled: number;
+          source: "direct" | "inherited" | "team";
+          enabled_at: string;
+        }
+      | undefined;
+    return row ? this.mapProfilePackEnablementRow(row) : null;
+  }
+
+  listProfilePackEnablements(profileId?: string): ProfilePackEnablementRecord[] {
+    const rows = (profileId
+      ? this.db
+          .prepare(
+            "SELECT * FROM profile_pack_enablements WHERE profile_id = ? ORDER BY enabled_at ASC, pack_id ASC"
+          )
+          .all(profileId)
+      : this.db
+          .prepare("SELECT * FROM profile_pack_enablements ORDER BY profile_id ASC, enabled_at ASC, pack_id ASC")
+          .all()) as Array<{
+      profile_id: string;
+      pack_id: string;
+      enabled: number;
+      source: "direct" | "inherited" | "team";
+      enabled_at: string;
+    }>;
+    return rows.map((row) => this.mapProfilePackEnablementRow(row));
+  }
+
   setChatRole(chatFk: string, role: "admin" | "normal") {
     this.db.prepare("UPDATE chats SET role = ? WHERE id = ?").run(role, chatFk);
   }
@@ -1543,6 +1663,44 @@ export class SqliteStorage {
       disabled: row.disabled === 1,
       createdAt: row.created_at,
       updatedAt: row.updated_at
+    };
+  }
+
+  private mapPackInstallRow(row: {
+    pack_id: string;
+    version: string | null;
+    source_kind: string;
+    source_path: string | null;
+    install_state: string;
+    manifest_json: string;
+    installed_at: string;
+    updated_at: string;
+  }): PackInstallRecord {
+    return {
+      packId: row.pack_id,
+      version: row.version,
+      sourceKind: row.source_kind,
+      sourcePath: row.source_path,
+      installState: row.install_state,
+      manifestJson: row.manifest_json,
+      installedAt: row.installed_at,
+      updatedAt: row.updated_at
+    };
+  }
+
+  private mapProfilePackEnablementRow(row: {
+    profile_id: string;
+    pack_id: string;
+    enabled: number;
+    source: "direct" | "inherited" | "team";
+    enabled_at: string;
+  }): ProfilePackEnablementRecord {
+    return {
+      profileId: row.profile_id,
+      packId: row.pack_id,
+      enabled: row.enabled === 1,
+      source: row.source,
+      enabledAt: row.enabled_at
     };
   }
 }
