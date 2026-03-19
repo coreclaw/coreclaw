@@ -3,6 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { main } from "./main.js";
+import { runDoctorChecks } from "./doctor.js";
+import { runWorkclawInit } from "./install/init.js";
+import { scaffoldTeamWorkspace } from "./install/team-init.js";
 import { runPreflightChecks } from "./preflight.js";
 
 const HELP_TEXT = `workclaw - role-oriented AI runtime
@@ -10,6 +13,9 @@ const HELP_TEXT = `workclaw - role-oriented AI runtime
 Usage:
   workclaw [options]
   workclaw preflight [--mcp-config <path>]
+  workclaw doctor
+  workclaw init
+  workclaw team init <id>
 
 Options:
   -h, --help      Show help
@@ -56,10 +62,34 @@ export const runCli = async (args: string[] = process.argv.slice(2)) => {
     process.stdout.write(`workspace.identity: ${report.identityFilePresent ? "present" : "missing"}\n`);
     process.stdout.write(`workspace.tools: ${report.toolsFilePresent ? "present" : "missing"}\n`);
     process.stdout.write(`provider.api_key: ${report.providerApiKeyPresent ? "set" : "missing"}\n`);
+    process.stdout.write(`profiles.resolved: ${report.profilesResolved}\n`);
+    process.stdout.write(`bindings.count: ${report.bindingsCount}\n`);
+    process.stdout.write(`packs.count: ${report.packCount}\n`);
+    process.stdout.write(`missing.required_env: ${report.missingRequiredEnv.length}\n`);
     process.stdout.write(`warnings: ${report.warnings.length}\n`);
     for (const warning of report.warnings) {
       process.stdout.write(`warning: ${warning}\n`);
     }
+    return;
+  }
+  if (args[0] === "doctor") {
+    const report = runDoctorChecks();
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return;
+  }
+  if (args[0] === "init") {
+    const result = runWorkclawInit();
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+  if (args[0] === "team" && args[1] === "init") {
+    const teamId = args[2]?.trim();
+    if (!teamId) {
+      throw new Error("Missing team id for 'workclaw team init'.");
+    }
+    const workspaceDir = path.join(process.cwd(), "workspace", "teams", teamId);
+    scaffoldTeamWorkspace(workspaceDir);
+    process.stdout.write(`${JSON.stringify({ teamId, workspaceDir }, null, 2)}\n`);
     return;
   }
   if (args.includes("--help") || args.includes("-h")) {

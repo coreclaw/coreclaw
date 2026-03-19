@@ -20,6 +20,10 @@ test("runPreflightChecks validates explicit MCP config path", () => {
     assert.equal(typeof report.identityFilePresent, "boolean");
     assert.equal(typeof report.toolsFilePresent, "boolean");
     assert.equal(typeof report.providerApiKeyPresent, "boolean");
+    assert.equal(typeof report.profilesResolved, "number");
+    assert.equal(typeof report.bindingsCount, "number");
+    assert.equal(typeof report.packCount, "number");
+    assert.ok(Array.isArray(report.missingRequiredEnv));
     assert.ok(Array.isArray(report.warnings));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
