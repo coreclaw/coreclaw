@@ -17,6 +17,7 @@ import { DefaultToolPolicyEngine } from "./tools/policy.js";
 import { builtInTools } from "./tools/builtins/index.js";
 import { McpManager } from "./mcp/manager.js";
 import { SkillLoader } from "./skills/loader.js";
+import { ProfileRuntimeRegistry } from "./profiles/runtime.js";
 import { CliChannel } from "./channels/cli.js";
 import { WebhookChannel } from "./channels/webhook.js";
 import type { Channel } from "./channels/base.js";
@@ -219,6 +220,8 @@ export const createCoreclawApp = async (
   ensureDir(config.dataDir);
   ensureDir(path.dirname(config.sqlitePath));
   ensureDir(config.workspaceDir);
+  const profileRegistry = new ProfileRuntimeRegistry(config);
+  profileRegistry.ensureDirectories();
 
   const logger = options.logger ?? createLogger(config);
   const telemetry = new RuntimeTelemetry();
@@ -504,7 +507,7 @@ export const createCoreclawApp = async (
   const runtime = new AgentRuntime(provider, toolRegistry, config, logger);
   const bus = new MessageBus(storage, config, logger);
   const heartbeatService = new HeartbeatService(storage, bus, config, logger, telemetry);
-  const contextBuilder = new ContextBuilder(storage, config, config.workspaceDir);
+  const contextBuilder = new ContextBuilder(storage, config, config.workspaceDir, profileRegistry);
   const router = new ConversationRouter(
     storage,
     contextBuilder,

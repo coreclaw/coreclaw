@@ -912,7 +912,7 @@ export class SqliteStorage {
     chatId: string;
     displayName?: string | null;
   }): ChatRecord {
-    const existing = this.getChat(params.channel, params.chatId);
+    const existing = this.getChat(params.channel, params.chatId, params.profileId);
     if (existing) {
       if (params.displayName && params.displayName !== existing.displayName) {
         this.db
@@ -939,10 +939,16 @@ export class SqliteStorage {
     return this.getChatById(id)!;
   }
 
-  getChat(channel: string, chatId: string): ChatRecord | null {
-    const row = this.db
-      .prepare("SELECT * FROM chats WHERE channel = ? AND chat_id = ?")
-      .get(channel, chatId) as
+  getChat(channel: string, chatId: string, profileId?: string): ChatRecord | null {
+    const row = (profileId
+      ? this.db
+          .prepare("SELECT * FROM chats WHERE channel = ? AND chat_id = ? AND profile_id = ?")
+          .get(channel, chatId, profileId)
+      : this.db
+          .prepare(
+            "SELECT * FROM chats WHERE channel = ? AND chat_id = ? ORDER BY CASE WHEN profile_id = 'main' THEN 0 ELSE 1 END, id ASC LIMIT 1"
+          )
+          .get(channel, chatId)) as
       | {
           id: string;
           profile_id: string;

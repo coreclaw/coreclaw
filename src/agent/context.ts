@@ -1,7 +1,10 @@
 import fs from "node:fs";
+import path from "node:path";
 import type { InboundMessage, ChatMessage, ChatRecord } from "../types.js";
 import type { SqliteStorage } from "../storage/sqlite.js";
 import type { Config } from "../config/schema.js";
+import type { ResolvedWorkclawProfile } from "../profiles/types.js";
+import { ProfileRuntimeRegistry } from "../profiles/runtime.js";
 import type { SkillIndexEntry } from "../skills/types.js";
 import {
   resolveChatMemoryPath,
@@ -153,24 +156,38 @@ const applyTokenBudget = (
 };
 
 export class ContextBuilder {
+  private readonly profileRegistry: ProfileRuntimeRegistry;
+
   constructor(
     private storage: SqliteStorage,
     private config: Config,
-    private workspaceDir: string
-  ) {}
+    private workspaceDir: string,
+    profileRegistry?: ProfileRuntimeRegistry
+  ) {
+    this.profileRegistry =
+      profileRegistry ??
+      new ProfileRuntimeRegistry(config, {
+        instanceRoot: path.dirname(path.resolve(workspaceDir))
+      });
+  }
+
+  private resolveProfile(chat: ChatRecord): ResolvedWorkclawProfile {
+    return this.profileRegistry.getRequired(chat.profileId);
+  }
 
   build(params: {
     chat: ChatRecord;
     inbound: InboundMessage;
     runMode?: RunMode;
     skills: SkillIndexEntry[];
-  }): { messages: ChatMessage[]; systemPrompt: string } {
-    const identityPath = resolveWorkspacePath(this.workspaceDir, "IDENTITY.md");
-    const userPath = resolveWorkspacePath(this.workspaceDir, "USER.md");
-    const toolsPath = resolveWorkspacePath(this.workspaceDir, "TOOLS.md");
-    const globalMemoryPath = resolveWorkspacePath(this.workspaceDir, "memory/MEMORY.md");
+  }): { messages: ChatMessage[]; systemPrompt: string; profile: ResolvedWorkclawProfile } {
+    const profile = this.resolveProfile(params.chat);
+    const identityPath = resolveWorkspacePath(profile.workspaceDir, "IDENTITY.md");
+    const userPath = resolveWorkspacePath(profile.workspaceDir, "USER.md");
+    const toolsPath = resolveWorkspacePath(profile.workspaceDir, "TOOLS.md");
+    const globalMemoryPath = resolveWorkspacePath(profile.workspaceDir, "memory/MEMORY.md");
     const chatMemoryPath = resolveChatMemoryPath(
-      this.workspaceDir,
+      profile.workspaceDir,
       params.chat.channel,
       params.chat.chatId
     );
@@ -270,6 +287,6 @@ export class ContextBuilder {
     const boundedSystemPrompt =
       first && first.role === "system" ? first.content : systemPrompt;
 
-    return { messages: bounded, systemPrompt: boundedSystemPrompt };
+    return { messages: bounded, systemPrompt: boundedSystemPrompt, profile };
   }
 }

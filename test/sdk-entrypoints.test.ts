@@ -24,7 +24,7 @@ test("createCoreclawApp supports lifecycle start/stop for embedded usage", async
     webhook: { enabled: false },
     observability: {
       enabled: false,
-      http: { enabled: false }
+      http: { enabled: false, host: "127.0.0.1", port: 3210 }
     }
   });
 
@@ -55,7 +55,7 @@ test("mcp.reload records telemetry and audit metadata with reason", async () => 
     webhook: { enabled: false },
     observability: {
       enabled: false,
-      http: { enabled: false }
+      http: { enabled: false, host: "127.0.0.1", port: 3210 }
     }
   });
   fs.writeFileSync(fixture.config.mcpConfigPath, JSON.stringify({ servers: {} }), "utf-8");
@@ -78,6 +78,7 @@ test("mcp.reload records telemetry and audit metadata with reason", async () => 
         chat: {
           channel: "cli",
           chatId: "admin",
+          profileId: chat.profileId,
           role: "admin",
           id: chat.id
         },
@@ -131,7 +132,7 @@ test("mcp.reload non-force applies backoff and circuit after repeated failures",
     webhook: { enabled: false },
     observability: {
       enabled: false,
-      http: { enabled: false }
+      http: { enabled: false, host: "127.0.0.1", port: 3210 }
     },
     mcpSync: {
       failureBackoffBaseMs: 50,
@@ -154,6 +155,7 @@ test("mcp.reload non-force applies backoff and circuit after repeated failures",
     chat: {
       channel: "cli" as const,
       chatId: "admin",
+      profileId: chat.profileId,
       role: "admin" as const,
       id: chat.id
     },

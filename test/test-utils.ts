@@ -271,6 +271,7 @@ export const createToolContext = (params: {
   workspaceDir: string;
   channel?: string;
   chatId?: string;
+  profileId?: string;
   chatRole?: "admin" | "normal";
   chatFk?: string;
   skills?: SkillIndexEntry[];
@@ -281,6 +282,7 @@ export const createToolContext = (params: {
   const chat = {
     channel: params.channel ?? "cli",
     chatId: params.chatId ?? "local",
+    profileId: params.profileId ?? "main",
     role: params.chatRole ?? "normal",
     id: params.chatFk ?? "chat-fk"
   };

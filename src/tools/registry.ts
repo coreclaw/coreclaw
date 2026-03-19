@@ -38,7 +38,14 @@ const redactValue = (value: unknown, depth = 0): unknown => {
 
 export type ToolContext = {
   workspaceDir: string;
-  chat: { channel: string; chatId: string; role: "admin" | "normal"; id: string };
+  chat: {
+    channel: string;
+    chatId: string;
+    role: "admin" | "normal";
+    id: string;
+    profileId: string;
+  };
+  profile?: { id: string; workspaceDir: string; stateDir: string; role: string };
   storage: SqliteStorage;
   mcp: McpManager;
   mcpReloader?: (params?: McpReloadRequest) => Promise<McpReloadResult>;

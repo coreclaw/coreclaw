@@ -113,7 +113,7 @@ export class ConversationRouter {
   }
 
   handleInbound = async (message: InboundMessage) => {
-    const key = `${message.channel}:${message.chatId}`;
+    const key = `${this.resolveConversationProfileId(message)}:${message.channel}:${message.chatId}`;
     const queue = this.queues.get(key) ?? new SerialQueue();
     this.queues.set(key, queue);
     if (!queue.isIdle()) {
@@ -166,7 +166,9 @@ export class ConversationRouter {
   }
 
   private async processMessage(message: InboundMessage) {
+    const requestedProfileId = this.resolveConversationProfileId(message);
     const chat = this.storage.upsertChat({
+      profileId: requestedProfileId,
       channel: message.channel,
       chatId: message.chatId
     });
@@ -217,7 +219,7 @@ export class ConversationRouter {
       );
     }
 
-    const { messages } = this.contextBuilder.build({
+    const { messages, profile } = this.contextBuilder.build({
       chat,
       inbound: message,
       runMode,
@@ -225,8 +227,20 @@ export class ConversationRouter {
     });
 
     const toolContext = {
-      workspaceDir: this.config.workspaceDir,
-      chat: { channel: chat.channel, chatId: chat.chatId, role: chat.role, id: chat.id },
+      workspaceDir: profile.workspaceDir,
+      chat: {
+        channel: chat.channel,
+        chatId: chat.chatId,
+        role: chat.role,
+        id: chat.id,
+        profileId: chat.profileId
+      },
+      profile: {
+        id: profile.id,
+        workspaceDir: profile.workspaceDir,
+        stateDir: profile.stateDir,
+        role: profile.role
+      },
       storage: this.storage,
       mcp: this.mcp,
       heartbeat: this.heartbeatController,
@@ -389,6 +403,17 @@ export class ConversationRouter {
         error: errorMessage ?? undefined
       });
     }
+  }
+
+  private resolveConversationProfileId(message: InboundMessage): string {
+    const requested =
+      typeof message.metadata?.profileId === "string" && message.metadata.profileId.trim()
+        ? message.metadata.profileId.trim()
+        : undefined;
+    if (requested) {
+      return requested;
+    }
+    return this.storage.getChat(message.channel, message.chatId)?.profileId ?? "main";
   }
 
   private resolveSkills(): SkillIndexEntry[] {
