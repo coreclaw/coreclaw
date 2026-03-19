@@ -40,7 +40,11 @@ export const runTeamInit = (teamId: string, rootDir: string = process.cwd()) => 
   const memberProfiles = [
     { id: `${teamId}-pm`, role: "pm", packs: ["role-pm-base"] },
     { id: `${teamId}-dev`, role: "dev", packs: ["role-dev-base", "platform-gitlab", "platform-jenkins"] },
-    { id: `${teamId}-qa`, role: "qa", packs: ["role-qa-base", "platform-jenkins"] }
+    {
+      id: `${teamId}-qa`,
+      role: "qa",
+      packs: ["role-qa-base", "platform-jenkins", "platform-playwright"]
+    }
   ];
 
   for (const member of memberProfiles) {
