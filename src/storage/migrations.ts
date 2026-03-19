@@ -172,5 +172,27 @@ export const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_webhook_outbox_chats_touched
         ON webhook_outbox_chats(touched_at, chat_id);
     `
+  },
+  {
+    id: 8,
+    sql: `
+      CREATE TABLE IF NOT EXISTS profiles (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL,
+        workspace_dir TEXT NOT NULL,
+        state_dir TEXT NOT NULL,
+        llm_profile TEXT,
+        tool_profile TEXT,
+        disabled INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_profiles_role ON profiles(role);
+
+      ALTER TABLE chats ADD COLUMN profile_id TEXT NOT NULL DEFAULT 'main';
+      CREATE INDEX IF NOT EXISTS idx_chats_profile_channel_chat
+        ON chats(profile_id, channel, chat_id);
+    `
   }
 ];

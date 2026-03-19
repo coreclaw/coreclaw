@@ -24,12 +24,26 @@ export type ConversationKey = string;
 
 export type ChatRecord = {
   id: string;
+  profileId: string;
   channel: string;
   chatId: string;
   displayName: string | null;
   role: "admin" | "normal";
   registered: boolean;
   lastMessageAt: string | null;
+};
+
+export type ProfileRecord = {
+  id: string;
+  name: string;
+  role: string;
+  workspaceDir: string;
+  stateDir: string;
+  llmProfile: string | null;
+  toolProfile: string | null;
+  disabled: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type ConversationState = {

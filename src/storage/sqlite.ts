@@ -9,6 +9,7 @@ import type {
   ChatRecord,
   ConversationState,
   InboundMessage,
+  ProfileRecord,
   TaskRunRecord,
   TaskRecord
 } from "../types.js";
@@ -91,9 +92,39 @@ export class SqliteStorage {
 
     const latest = migrations[migrations.length - 1]?.id ?? 0;
     this.setMeta("schema_version", String(latest));
+    this.ensureProfileMigrationState();
     this.setMeta("schema_last_migrated_at", nowIso());
     this.db
       .prepare("DELETE FROM meta WHERE key IN ('schema_last_failed_migration', 'schema_last_failure_at')")
+      .run();
+  }
+
+  private ensureProfileMigrationState() {
+    const schemaVersion = Number(this.getMeta("schema_version") ?? "0") || 0;
+    if (schemaVersion < 8) {
+      return;
+    }
+
+    const now = nowIso();
+    this.db
+      .prepare(
+        "INSERT OR IGNORE INTO profiles(id, name, role, workspace_dir, state_dir, llm_profile, tool_profile, disabled, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)"
+      )
+      .run(
+        "main",
+        "Main",
+        "general",
+        this.config.workspaceDir,
+        this.config.dataDir,
+        this.config.llm.defaultProfile ?? null,
+        this.config.profiles.defaults?.toolProfile ?? null,
+        0,
+        now,
+        now
+      );
+
+    this.db
+      .prepare("UPDATE chats SET profile_id = 'main' WHERE profile_id IS NULL OR TRIM(profile_id) = ''")
       .run();
   }
 
@@ -876,6 +907,7 @@ export class SqliteStorage {
   }
 
   upsertChat(params: {
+    profileId?: string;
     channel: string;
     chatId: string;
     displayName?: string | null;
@@ -892,10 +924,11 @@ export class SqliteStorage {
     const id = newId();
     this.db
       .prepare(
-        "INSERT INTO chats(id, channel, chat_id, display_name, last_message_at, role, registered) VALUES(?,?,?,?,?,?,?)"
+        "INSERT INTO chats(id, profile_id, channel, chat_id, display_name, last_message_at, role, registered) VALUES(?,?,?,?,?,?,?,?)"
       )
       .run(
         id,
+        params.profileId ?? "main",
         params.channel,
         params.chatId,
         params.displayName ?? null,
@@ -912,6 +945,7 @@ export class SqliteStorage {
       .get(channel, chatId) as
       | {
           id: string;
+          profile_id: string;
           channel: string;
           chat_id: string;
           display_name: string | null;
@@ -929,6 +963,7 @@ export class SqliteStorage {
       .get(id) as
       | {
           id: string;
+          profile_id: string;
           channel: string;
           chat_id: string;
           display_name: string | null;
@@ -945,6 +980,7 @@ export class SqliteStorage {
       .prepare("SELECT * FROM chats ORDER BY COALESCE(last_message_at, id) DESC LIMIT ?")
       .all(limit) as Array<{
       id: string;
+      profile_id: string;
       channel: string;
       chat_id: string;
       display_name: string | null;
@@ -953,6 +989,44 @@ export class SqliteStorage {
       registered: number;
     }>;
     return rows.map((row) => this.mapChatRow(row));
+  }
+
+  getProfile(id: string): ProfileRecord | null {
+    const row = this.db
+      .prepare("SELECT * FROM profiles WHERE id = ?")
+      .get(id) as
+      | {
+          id: string;
+          name: string;
+          role: string;
+          workspace_dir: string;
+          state_dir: string;
+          llm_profile: string | null;
+          tool_profile: string | null;
+          disabled: number;
+          created_at: string;
+          updated_at: string;
+        }
+      | undefined;
+    return row ? this.mapProfileRow(row) : null;
+  }
+
+  listProfiles(limit = 100): ProfileRecord[] {
+    const rows = this.db
+      .prepare("SELECT * FROM profiles ORDER BY id ASC LIMIT ?")
+      .all(limit) as Array<{
+      id: string;
+      name: string;
+      role: string;
+      workspace_dir: string;
+      state_dir: string;
+      llm_profile: string | null;
+      tool_profile: string | null;
+      disabled: number;
+      created_at: string;
+      updated_at: string;
+    }>;
+    return rows.map((row) => this.mapProfileRow(row));
   }
 
   setChatRole(chatFk: string, role: "admin" | "normal") {
@@ -1420,6 +1494,7 @@ export class SqliteStorage {
 
   private mapChatRow(row: {
     id: string;
+    profile_id: string;
     channel: string;
     chat_id: string;
     display_name: string | null;
@@ -1429,12 +1504,39 @@ export class SqliteStorage {
   }): ChatRecord {
     return {
       id: row.id,
+      profileId: row.profile_id,
       channel: row.channel,
       chatId: row.chat_id,
       displayName: row.display_name,
       role: row.role,
       registered: row.registered === 1,
       lastMessageAt: row.last_message_at
+    };
+  }
+
+  private mapProfileRow(row: {
+    id: string;
+    name: string;
+    role: string;
+    workspace_dir: string;
+    state_dir: string;
+    llm_profile: string | null;
+    tool_profile: string | null;
+    disabled: number;
+    created_at: string;
+    updated_at: string;
+  }): ProfileRecord {
+    return {
+      id: row.id,
+      name: row.name,
+      role: row.role,
+      workspaceDir: row.workspace_dir,
+      stateDir: row.state_dir,
+      llmProfile: row.llm_profile,
+      toolProfile: row.tool_profile,
+      disabled: row.disabled === 1,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
     };
   }
 }
