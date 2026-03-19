@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { readLocalConfigFile, writeLocalConfigFile } from "./config-file.js";
 
 const DEFAULT_PROFILE_FILES: Record<string, string> = {
   "ROLE.md": "# Role\n",
@@ -21,4 +22,40 @@ export const scaffoldProfileWorkspace = (workspaceDir: string): void => {
       fs.writeFileSync(filePath, content, "utf-8");
     }
   }
+};
+
+export const runProfileAdd = (
+  profileId: string,
+  role = "general",
+  rootDir: string = process.cwd()
+) => {
+  const config = readLocalConfigFile(rootDir);
+  const profiles =
+    config.profiles && typeof config.profiles === "object"
+      ? (config.profiles as { defaults?: Record<string, unknown>; list?: Array<Record<string, unknown>> })
+      : { defaults: {}, list: [] };
+  const list = profiles.list ?? [];
+  if (list.some((entry) => entry.id === profileId)) {
+    throw new Error(`Profile already exists: ${profileId}`);
+  }
+
+  const workspaceRoot =
+    typeof profiles.defaults?.workspaceRoot === "string"
+      ? profiles.defaults.workspaceRoot
+      : "./workspace/profiles";
+  const profileWorkspaceDir = path.resolve(rootDir, workspaceRoot, profileId);
+  scaffoldProfileWorkspace(profileWorkspaceDir);
+  list.push({ id: profileId, name: profileId, role });
+  const configPath = writeLocalConfigFile(rootDir, {
+    ...config,
+    profiles: {
+      ...profiles,
+      list
+    }
+  });
+  return {
+    configPath,
+    profileId,
+    workspaceDir: profileWorkspaceDir
+  };
 };

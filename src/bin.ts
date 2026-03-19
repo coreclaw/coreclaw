@@ -2,9 +2,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { runPackInfo, runPacksList, runProfilesList, runProfilesResolve } from "./cli-management.js";
 import { main } from "./main.js";
 import { runDoctorChecks } from "./doctor.js";
 import { runWorkclawInit } from "./install/init.js";
+import { runProfileAdd } from "./install/profile-init.js";
 import { scaffoldTeamWorkspace } from "./install/team-init.js";
 import { runPreflightChecks } from "./preflight.js";
 
@@ -15,6 +17,11 @@ Usage:
   workclaw preflight [--mcp-config <path>]
   workclaw doctor
   workclaw init
+  workclaw profiles list
+  workclaw profiles resolve <id>
+  workclaw profile add <id>
+  workclaw packs list
+  workclaw packs info <id>
   workclaw team init <id>
 
 Options:
@@ -75,6 +82,38 @@ export const runCli = async (args: string[] = process.argv.slice(2)) => {
   if (args[0] === "doctor") {
     const report = runDoctorChecks();
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return;
+  }
+  if (args[0] === "profiles" && args[1] === "list") {
+    process.stdout.write(`${JSON.stringify(runProfilesList(), null, 2)}\n`);
+    return;
+  }
+  if (args[0] === "profiles" && args[1] === "resolve") {
+    const profileId = args[2]?.trim();
+    if (!profileId) {
+      throw new Error("Missing profile id for 'workclaw profiles resolve'.");
+    }
+    process.stdout.write(`${JSON.stringify(runProfilesResolve(profileId), null, 2)}\n`);
+    return;
+  }
+  if (args[0] === "profile" && args[1] === "add") {
+    const profileId = args[2]?.trim();
+    if (!profileId) {
+      throw new Error("Missing profile id for 'workclaw profile add'.");
+    }
+    process.stdout.write(`${JSON.stringify(runProfileAdd(profileId), null, 2)}\n`);
+    return;
+  }
+  if (args[0] === "packs" && args[1] === "list") {
+    process.stdout.write(`${JSON.stringify(runPacksList(), null, 2)}\n`);
+    return;
+  }
+  if (args[0] === "packs" && args[1] === "info") {
+    const packId = args[2]?.trim();
+    if (!packId) {
+      throw new Error("Missing pack id for 'workclaw packs info'.");
+    }
+    process.stdout.write(`${JSON.stringify(runPackInfo(packId), null, 2)}\n`);
     return;
   }
   if (args[0] === "init") {
