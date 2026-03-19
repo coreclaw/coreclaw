@@ -1,6 +1,6 @@
-# Coreclaw Architecture
+# Workclaw Architecture
 
-> A lightweight yet capable TypeScript bot architecture, inspired by NanoClaw + NanoBot patterns.
+> A role-oriented TypeScript runtime for software delivery work, built on the Coreclaw kernel.
 > Goals: **single-process**, **plug-in extensions (Tools/MCP/Skills)**, **multi-channel ready**, **safe-by-default**, and **evolvable**.
 
 ---
@@ -173,7 +173,7 @@ Unifies three tool sources:
 - Reload outcomes are observable via telemetry metrics and `audit_events`.
 
 ### 8.2 MCP Server (Future)
-> Not yet implemented. A future extension may expose Coreclaw's own capabilities
+> Not yet implemented. A future extension may expose Workclaw's own capabilities
 > (message sending, scheduler, memory, admin ops) as an MCP server for external clients.
 
 ---
@@ -429,7 +429,7 @@ The `DefaultToolPolicyEngine` enforces the following rules:
 ## 13) Repo Layout
 
 ```
-coreclaw/
+workclaw/
   package.json
   tsconfig.json
   Dockerfile
@@ -616,7 +616,7 @@ export OPENAI_API_KEY=YOUR_KEY
 pnpm run dev
 ```
 
-Type into the CLI prompt to interact with Coreclaw.
+Type into the CLI prompt to interact with Workclaw.
 
 ---
 

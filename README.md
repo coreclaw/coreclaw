@@ -1,15 +1,15 @@
-# Coreclaw
+# Workclaw
 
 ![Node CI](https://github.com/coreclaw/coreclaw/workflows/Node%20CI/badge.svg)
-[![npm](https://img.shields.io/npm/v/coreclaw.svg)](https://www.npmjs.com/package/coreclaw)
-![license](https://img.shields.io/npm/l/coreclaw)
+[![npm](https://img.shields.io/npm/v/workclaw.svg)](https://www.npmjs.com/package/workclaw)
+![license](https://img.shields.io/npm/l/workclaw)
 
-Lightweight but capable TypeScript bot architecture.
+Role-oriented AI runtime for software delivery work.
 Single-process by default, tool- and skill-driven, MCP-ready, and safe-by-default.
 
 ## Reliability Positioning
 
-Coreclaw is optimized for the **single-host reliable AI bot** track:
+Workclaw is optimized for the **single-host reliable AI runtime** track:
 
 - one process, one local SQLite, one workspace
 - durable queue + retries + dead-letter replay
@@ -32,12 +32,12 @@ If your target is: "a bot that keeps running correctly on one machine under real
 
 Notes:
 
-- "Effectively-once" here means duplicate deliveries are neutralized by idempotency guards inside Coreclaw; external side effects still need idempotent tool design.
+- "Effectively-once" here means duplicate deliveries are neutralized by idempotency guards inside Workclaw; external side effects still need idempotent tool design.
 - Queue dead-letter is an explicit stop condition, not silent drop.
 
 ## Failure Model and Recovery
 
-Coreclaw handles the following failure classes by default:
+Workclaw handles the following failure classes by default:
 
 1. **Process crash during message handling**
    Result: stale `processing` messages are recovered on restart and re-queued.
@@ -102,12 +102,12 @@ Also recommended:
 
 ## CLI and SDK
 
-- CLI: `coreclaw` (or `pnpm run dev` / `pnpm run start`)
-- SDK: import from `@coreclaw/core` and manage lifecycle via `createCoreclawApp()`
-- CLI flags: `coreclaw --help`, `coreclaw --version`, `coreclaw preflight`
+- CLI: `workclaw` (or `pnpm run dev` / `pnpm run start`)
+- SDK: import from `workclaw` and manage lifecycle via `createCoreclawApp()`
+- CLI flags: `workclaw --help`, `workclaw --version`, `workclaw preflight`
 
 ```ts
-import { createCoreclawApp, loadConfig } from "@coreclaw/core";
+import { createCoreclawApp, loadConfig } from "workclaw";
 
 const app = await createCoreclawApp({ config: loadConfig() });
 await app.start();
@@ -169,8 +169,8 @@ pnpm run ops:db:backup -- --db data/bot.sqlite
 pnpm run ops:db:restore -- --db data/bot.sqlite --from data/backups/manual-xxxx.sqlite --force
 
 # Validate startup config and MCP file before deployment
-coreclaw preflight
-coreclaw preflight --mcp-config ./path/to/.mcp.json
+workclaw preflight
+workclaw preflight --mcp-config ./path/to/.mcp.json
 ```
 
 CLI queue ops:
@@ -416,7 +416,7 @@ node dist/bin.js
 ```
 
 3. **Persist data**  
-   Ensure `data/` and `workspace/` are persisted (bind mount or volume). Coreclaw auto-creates them if missing.
+Ensure `data/` and `workspace/` are persisted (bind mount or volume). Workclaw auto-creates them if missing.
 
 4. **Config**  
    Use `config.json` for stable configuration in production; use env vars for secrets.
@@ -426,12 +426,12 @@ node dist/bin.js
 Build and run using the included `Dockerfile`:
 
 ```bash
-docker build -t coreclaw .
+docker build -t workclaw .
 docker run -it --rm \\
   -e OPENAI_API_KEY=YOUR_KEY \\
   -v $(pwd)/data:/app/data \\
   -v $(pwd)/workspace:/app/workspace \\
-  coreclaw
+  workclaw
 ```
 
 Optional: mount `.mcp.json` or `config.json` if you want MCP or custom settings:
@@ -443,7 +443,7 @@ docker run -it --rm \\
   -v $(pwd)/workspace:/app/workspace \\
   -v $(pwd)/.mcp.json:/app/.mcp.json \\
   -v $(pwd)/config.json:/app/config.json \\
-  coreclaw
+  workclaw
 ```
 
 ## CI Template (GitHub Actions)
@@ -560,7 +560,7 @@ Memory files: `workspace/memory/MEMORY.md` (global), `workspace/memory/{channel}
 
 ### Roles
 
-Coreclaw uses two roles: **admin** and **normal**. New chats default to `normal`.
+Workclaw uses two roles: **admin** and **normal**. New chats default to `normal`.
 
 ### Admin Bootstrap
 
@@ -601,7 +601,7 @@ Non-admin `fs.write` is denied for: `IDENTITY.md`, `TOOLS.md`, `USER.md`, `.mcp.
 
 ## Memory
 
-Coreclaw maintains two types of persistent memory:
+Workclaw maintains two types of persistent memory:
 
 - **Global memory** (`workspace/memory/MEMORY.md`): shared across all chats. Admin-only for writes.
 - **Per-chat memory** (`workspace/memory/{channel}_{chatId}.md`): scoped to a specific chat session.
@@ -610,7 +610,7 @@ Both are automatically included in the system prompt when available, except isol
 
 ## Conversation Compaction
 
-When the stored message count for a chat exceeds `historyMaxMessages * 2`, Coreclaw automatically compacts:
+When the stored message count for a chat exceeds `historyMaxMessages * 2`, Workclaw automatically compacts:
 
 1. Recent messages are sent to the LLM to generate a bullet summary (max 150 words).
 2. Old messages beyond `historyMaxMessages` are pruned from storage.
@@ -620,7 +620,7 @@ This keeps context manageable while preserving key facts and decisions.
 
 ## Inbound Execution Ledger
 
-To ensure idempotency when messages are re-queued (e.g., after a retry), Coreclaw maintains an `inbound_executions` table:
+To ensure idempotency when messages are re-queued (e.g., after a retry), Workclaw maintains an `inbound_executions` table:
 
 - Before processing, the router checks if the inbound message was already processed.
 - If completed, the cached response is reused without re-running the LLM or tools.
@@ -671,7 +671,7 @@ MCP tools are injected as: `mcp__<server>__<tool>`.
 You can also force refresh manually with `mcp.reload`.
 If `.mcp.json` is invalid (for example malformed JSON), reload is rejected and the previous MCP tool set remains active.
 Each enabled server must define exactly one of `command` or `url`; `args/env` are only valid with `command`.
-Use `coreclaw preflight` to validate config and `.mcp.json` before rolling out changes.
+Use `workclaw preflight` to validate config and `.mcp.json` before rolling out changes.
 Reload attempts are tracked in telemetry (`coreclaw_mcp_reload_*`) and persisted in `audit_events` with reason/duration metadata.
 
 ## Agent Heartbeat
@@ -754,7 +754,7 @@ workspace/
 
 ## Inspiration
 
-Coreclaw is inspired by NanoClaw + NanoBot patterns.
+Workclaw is built on the Coreclaw runtime kernel and inspired by NanoClaw + NanoBot patterns.
 
 ---
 

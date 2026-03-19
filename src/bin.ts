@@ -5,11 +5,11 @@ import { fileURLToPath } from "node:url";
 import { main } from "./main.js";
 import { runPreflightChecks } from "./preflight.js";
 
-const HELP_TEXT = `coreclaw - lightweight AI bot runtime
+const HELP_TEXT = `workclaw - role-oriented AI runtime
 
 Usage:
-  coreclaw [options]
-  coreclaw preflight [--mcp-config <path>]
+  workclaw [options]
+  workclaw preflight [--mcp-config <path>]
 
 Options:
   -h, --help      Show help
@@ -94,7 +94,7 @@ const parsePreflightArgs = (args: string[]) => {
 if (isDirectExecution()) {
   void runCli().catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`coreclaw command failed: ${message}\n`);
+    process.stderr.write(`workclaw command failed: ${message}\n`);
     process.exit(1);
   });
 }
