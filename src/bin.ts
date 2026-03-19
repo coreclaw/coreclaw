@@ -10,19 +10,29 @@ import { runProfileAdd } from "./install/profile-init.js";
 import { scaffoldTeamWorkspace } from "./install/team-init.js";
 import { runPreflightChecks } from "./preflight.js";
 
-const HELP_TEXT = `workclaw - role-oriented AI runtime
+export type CliBranding = {
+  commandName: string;
+  productTagline: string;
+};
+
+export const CORECLAW_CLI_BRANDING: CliBranding = {
+  commandName: "coreclaw",
+  productTagline: "lightweight AI bot runtime"
+};
+
+const buildHelpText = (branding: CliBranding) => `${branding.commandName} - ${branding.productTagline}
 
 Usage:
-  workclaw [options]
-  workclaw preflight [--mcp-config <path>]
-  workclaw doctor
-  workclaw init
-  workclaw profiles list
-  workclaw profiles resolve <id>
-  workclaw profile add <id>
-  workclaw packs list
-  workclaw packs info <id>
-  workclaw team init <id>
+  ${branding.commandName} [options]
+  ${branding.commandName} preflight [--mcp-config <path>]
+  ${branding.commandName} doctor
+  ${branding.commandName} init
+  ${branding.commandName} profiles list
+  ${branding.commandName} profiles resolve <id>
+  ${branding.commandName} profile add <id>
+  ${branding.commandName} packs list
+  ${branding.commandName} packs info <id>
+  ${branding.commandName} team init <id>
 
 Options:
   -h, --help      Show help
@@ -55,7 +65,10 @@ const readVersion = () => {
   }
 };
 
-export const runCli = async (args: string[] = process.argv.slice(2)) => {
+export const runCli = async (
+  args: string[] = process.argv.slice(2),
+  branding: CliBranding = CORECLAW_CLI_BRANDING
+) => {
   if (args[0] === "preflight") {
     const report = runPreflightChecks(parsePreflightArgs(args.slice(1)));
     process.stdout.write("preflight: ok\n");
@@ -132,7 +145,7 @@ export const runCli = async (args: string[] = process.argv.slice(2)) => {
     return;
   }
   if (args.includes("--help") || args.includes("-h")) {
-    process.stdout.write(`${HELP_TEXT}\n`);
+    process.stdout.write(`${buildHelpText(branding)}\n`);
     return;
   }
   if (args.includes("--version") || args.includes("-v")) {
@@ -161,9 +174,9 @@ const parsePreflightArgs = (args: string[]) => {
 };
 
 if (isDirectExecution()) {
-  void runCli().catch((error) => {
+  void runCli(process.argv.slice(2), CORECLAW_CLI_BRANDING).catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`workclaw command failed: ${message}\n`);
+    process.stderr.write(`${CORECLAW_CLI_BRANDING.commandName} command failed: ${message}\n`);
     process.exit(1);
   });
 }
