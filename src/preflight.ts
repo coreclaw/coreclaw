@@ -4,9 +4,7 @@ import { loadConfig } from "./config/load.js";
 import { readMcpConfigFile } from "./mcp/config.js";
 import { enforceSecurityProfile } from "./security/gate.js";
 import { resolveProfilesConfig } from "./profiles/resolve.js";
-import { discoverWorkclawPacks } from "./packs/discovery.js";
-import { buildEffectiveMcpConfig } from "./packs/loader.js";
-import { resolveEffectivePackGraph } from "./packs/graph.js";
+import { runPackPreflightChecks } from "./preflight-packs.js";
 
 export type PreflightOptions = {
   mcpConfigPath?: string;
@@ -24,7 +22,12 @@ export type PreflightReport = {
   profilesResolved: number;
   bindingsCount: number;
   packCount: number;
+  profileGraphs: Array<{ profileId: string; graph: string[] }>;
+  mcpFragmentCount: number;
   missingRequiredEnv: string[];
+  templateIssues: string[];
+  bundleIssues: string[];
+  surfaceAuthConsistent: boolean;
   warnings: string[];
 };
 
@@ -39,26 +42,8 @@ export const runPreflightChecks = (options: PreflightOptions = {}): PreflightRep
   const toolsFilePresent = fs.existsSync(path.join(workspaceDir, "TOOLS.md"));
   const providerApiKeyPresent = Boolean(config.provider.apiKey?.trim());
   const profiles = resolveProfilesConfig(config);
-  const discoveredPacks = discoverWorkclawPacks(config);
-  const missingRequiredEnv = new Set<string>();
-  const graphs = profiles.map((profile) => {
-    const graph = resolveEffectivePackGraph(
-      discoveredPacks.filter((pack) => pack.allowed),
-      profile.enabledPackIds,
-      {
-        strict: config.packs.strict
-      }
-    );
-    for (const pack of graph) {
-      for (const requirement of pack.manifest.env ?? []) {
-        if (requirement.required && !process.env[requirement.name]?.trim()) {
-          missingRequiredEnv.add(requirement.name);
-        }
-      }
-    }
-    return { mcpFragments: graph.flatMap((pack) => pack.mcpFragments) };
-  });
-  buildEffectiveMcpConfig(mcpConfig, graphs);
+  const packReport = runPackPreflightChecks(config, mcpConfig);
+  const surfaceAuthConsistent = !config.webhook.enabled || Boolean(config.webhook.authToken?.trim());
 
   const warnings: string[] = [];
   if (!workspaceExists) {
@@ -67,11 +52,17 @@ export const runPreflightChecks = (options: PreflightOptions = {}): PreflightRep
   if (!providerApiKeyPresent) {
     warnings.push("OPENAI_API_KEY is not set.");
   }
-  if (config.webhook.enabled && !config.webhook.authToken?.trim()) {
+  if (!surfaceAuthConsistent) {
     warnings.push("Webhook is enabled without CORECLAW_WEBHOOK_AUTH_TOKEN.");
   }
-  for (const envName of missingRequiredEnv) {
+  for (const envName of packReport.missingRequiredEnv) {
     warnings.push(`Required environment variable is missing: ${envName}`);
+  }
+  for (const issue of packReport.templateIssues) {
+    warnings.push(issue);
+  }
+  for (const issue of packReport.bundleIssues) {
+    warnings.push(issue);
   }
 
   return {
@@ -85,8 +76,13 @@ export const runPreflightChecks = (options: PreflightOptions = {}): PreflightRep
     providerApiKeyPresent,
     profilesResolved: profiles.length,
     bindingsCount: config.bindings.length,
-    packCount: discoveredPacks.length,
-    missingRequiredEnv: [...missingRequiredEnv],
+    packCount: packReport.packCount,
+    profileGraphs: packReport.profileGraphs,
+    mcpFragmentCount: packReport.mcpFragmentCount,
+    missingRequiredEnv: packReport.missingRequiredEnv,
+    templateIssues: packReport.templateIssues,
+    bundleIssues: packReport.bundleIssues,
+    surfaceAuthConsistent,
     warnings
   };
 };

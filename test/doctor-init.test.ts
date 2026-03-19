@@ -40,9 +40,14 @@ test("runDoctorChecks reports runtime sections for current instance", () => {
     runWorkclawInit(root);
     const report = runDoctorChecks();
     assert.ok(report.runtime.queue);
+    assert.ok(Array.isArray(report.runtime.profileRuntimeHealth));
     assert.ok(Array.isArray(report.profiles));
     assert.ok(report.bindings.count >= 0);
     assert.ok(report.outbound);
+    assert.ok(report.surfaces);
+    assert.ok(report.mcp);
+    assert.ok(report.storage);
+    assert.ok(report.security);
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(root, { recursive: true, force: true });

@@ -100,7 +100,7 @@ export type ConversationState = {
 };
 
 export type TaskScheduleType = "cron" | "interval" | "once";
-export type TaskContextMode = "group" | "isolated";
+export type TaskContextMode = "group" | "full" | "minimal" | "isolated";
 export type TaskStatus = "active" | "paused" | "done";
 export type BusMessageDirection = "inbound" | "outbound";
 export type BusMessageStatus = "pending" | "processing" | "processed" | "dead_letter";

@@ -198,7 +198,16 @@ export class ConversationRouter {
     }
 
     const skills = this.resolveSkills(chat.profileId);
-    const runMode = resolveRunMode(message);
+    const baseRunMode = resolveRunMode(message);
+    const runMode = binding?.action.contextMode
+      ? {
+          ...baseRunMode,
+          contextMode:
+            (binding.action.contextMode === "full"
+              ? "group"
+              : binding.action.contextMode) as typeof baseRunMode.contextMode
+        }
+      : baseRunMode;
 
     const executionNow = nowIso();
     const execution = this.storage.startInboundExecution({

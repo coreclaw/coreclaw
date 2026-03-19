@@ -8,7 +8,7 @@ export type RunMode = {
 };
 
 const parseTaskContextMode = (value: unknown): TaskContextMode =>
-  value === "isolated" ? "isolated" : "group";
+  value === "isolated" || value === "minimal" || value === "full" ? value : "group";
 
 export const resolveRunMode = (inbound: InboundMessage): RunMode => {
   if (inbound.metadata?.isHeartbeat) {
@@ -32,7 +32,7 @@ export const resolveRunMode = (inbound: InboundMessage): RunMode => {
 };
 
 export const shouldIncludeChatContext = (runMode: RunMode) =>
-  runMode.kind === "chat" || runMode.contextMode === "group";
+  runMode.kind === "chat" || runMode.contextMode === "group" || runMode.contextMode === "full";
 
 export const formatUserContentForRunMode = (
   runMode: RunMode,

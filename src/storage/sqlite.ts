@@ -1757,6 +1757,10 @@ export class SqliteStorage {
     this.db.close();
   }
 
+  getSchemaVersion(): string | null {
+    return this.getMeta("schema_version");
+  }
+
   private upsertWebhookOutboxChatTouchedAt(chatId: string, touchedAt: string) {
     this.db
       .prepare(

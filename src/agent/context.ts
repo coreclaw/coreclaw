@@ -220,8 +220,12 @@ export class ContextBuilder {
       .filter((section): section is string => Boolean(section));
 
     const runMode = params.runMode ?? resolveRunMode(params.inbound);
+    const effectiveContextMode = runMode.contextMode === "group" ? "full" : runMode.contextMode;
     const state = this.storage.getConversationState(params.chat.id);
     const includeChatContext = shouldIncludeChatContext(runMode);
+    const includeGlobalMemory = effectiveContextMode === "full";
+    const includeConversationSummary = effectiveContextMode !== "isolated";
+    const includeSkillBodies = effectiveContextMode === "full";
     const enabledSkills = new Set(state.enabledSkills);
 
     const systemSections: string[] = [];
@@ -237,16 +241,17 @@ export class ContextBuilder {
     if (teamOverlaySections.length > 0) {
       systemSections.push(teamOverlaySections.join("\n\n"));
     }
-    if (globalMemory) {
+    systemSections.push(`# Pack Index\n${profile.enabledPackIds.join("\n") || "(no packs enabled)"}`);
+    if (includeGlobalMemory && globalMemory) {
       systemSections.push(`# Global Memory\n${globalMemory}`);
     }
-    if (includeChatContext && chatMemory) {
+    if (includeChatContext && effectiveContextMode === "full" && chatMemory) {
       systemSections.push(`# Chat Memory\n${chatMemory}`);
     }
     systemSections.push("# Skills Index\n" + renderSkillsIndex(params.skills, enabledSkills));
 
     const alwaysSkills = params.skills.filter((skill) => skill.always);
-    if (alwaysSkills.length > 0) {
+    if (includeSkillBodies && alwaysSkills.length > 0) {
       const skillBodies = alwaysSkills
         .map((skill) => {
           const content = readIfExists(skill.skillPath);
@@ -259,7 +264,7 @@ export class ContextBuilder {
     const activeSkills = params.skills.filter(
       (skill) => !skill.always && enabledSkills.has(skill.name)
     );
-    if (activeSkills.length > 0) {
+    if (includeSkillBodies && activeSkills.length > 0) {
       const skillBodies = activeSkills
         .map((skill) => {
           const content = readIfExists(skill.skillPath);
@@ -269,7 +274,7 @@ export class ContextBuilder {
       systemSections.push(`# Enabled Skills\n${skillBodies}`);
     }
 
-    if (includeChatContext && state.summary) {
+    if (includeConversationSummary && state.summary) {
       systemSections.push(`# Conversation Summary\n${state.summary}`);
     }
 
@@ -277,7 +282,7 @@ export class ContextBuilder {
 
     const messages: ChatMessage[] = [{ role: "system", content: systemPrompt }];
 
-    if (includeChatContext) {
+    if (includeChatContext && effectiveContextMode === "full") {
       const history = this.storage.listRecentMessages(
         params.chat.id,
         this.config.historyMaxMessages

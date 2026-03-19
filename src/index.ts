@@ -1,6 +1,7 @@
 export { createCoreclawApp, CoreclawApp, type CreateCoreclawAppOptions } from "./app.js";
 export { main } from "./main.js";
 export { runPreflightChecks, type PreflightOptions, type PreflightReport } from "./preflight.js";
+export { runPackPreflightChecks, type PackPreflightReport } from "./preflight-packs.js";
 export { runCli, CORECLAW_CLI_BRANDING, type CliBranding } from "./bin.js";
 export { runDoctorChecks, type DoctorReport } from "./doctor.js";
 export { runWorkclawInit } from "./install/init.js";

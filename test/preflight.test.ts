@@ -23,7 +23,12 @@ test("runPreflightChecks validates explicit MCP config path", () => {
     assert.equal(typeof report.profilesResolved, "number");
     assert.equal(typeof report.bindingsCount, "number");
     assert.equal(typeof report.packCount, "number");
+    assert.ok(Array.isArray(report.profileGraphs));
+    assert.equal(typeof report.mcpFragmentCount, "number");
     assert.ok(Array.isArray(report.missingRequiredEnv));
+    assert.ok(Array.isArray(report.templateIssues));
+    assert.ok(Array.isArray(report.bundleIssues));
+    assert.equal(typeof report.surfaceAuthConsistent, "boolean");
     assert.ok(Array.isArray(report.warnings));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
