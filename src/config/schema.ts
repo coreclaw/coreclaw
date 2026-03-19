@@ -4,6 +4,7 @@ import {
   WorkclawProfilesConfigSchema,
   WorkclawToolProfilesSchema
 } from "../profiles/schema.js";
+import { WorkclawPacksConfigSchema } from "../packs/schema.js";
 
 const heartbeatActiveHoursPattern = /^$|^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -16,6 +17,7 @@ export const ConfigSchema = z.object({
   llm: WorkclawLlmConfigSchema.prefault({}),
   toolProfiles: WorkclawToolProfilesSchema,
   profiles: WorkclawProfilesConfigSchema.prefault({}),
+  packs: WorkclawPacksConfigSchema.prefault({}),
   provider: z
     .object({
       type: z.enum(["openai"]).default("openai"),
