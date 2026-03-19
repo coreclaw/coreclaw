@@ -2,6 +2,16 @@ export { createCoreclawApp, CoreclawApp, type CreateCoreclawAppOptions } from ".
 export { main } from "./main.js";
 export { runPreflightChecks, type PreflightOptions, type PreflightReport } from "./preflight.js";
 export { runCli, CORECLAW_CLI_BRANDING, type CliBranding } from "./bin.js";
+export { runDoctorChecks, type DoctorReport } from "./doctor.js";
+export { runWorkclawInit } from "./install/init.js";
+export { scaffoldProfileWorkspace, runProfileAdd } from "./install/profile-init.js";
+export { scaffoldTeamWorkspace } from "./install/team-init.js";
+export {
+  runProfilesList,
+  runProfilesResolve,
+  runPacksList,
+  runPackInfo
+} from "./cli-management.js";
 
 export { loadConfig } from "./config/load.js";
 export type { Config } from "./config/schema.js";
