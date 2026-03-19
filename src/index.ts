@@ -31,6 +31,12 @@ export { RuntimeTelemetry } from "./observability/telemetry.js";
 
 export { AgentRuntime, OpenAICompatibleProvider } from "./agent/runtime.js";
 export type { LlmProvider } from "./agent/runtime.js";
+export {
+  discoverWorkclawPlugins,
+  NativePluginRegistry
+} from "./plugins/registry.js";
+export { parseWorkclawPluginManifest } from "./plugins/schema.js";
+export type { WorkclawPluginManifest, DiscoveredWorkclawPlugin } from "./plugins/types.js";
 export type {
   InboundMessage,
   OutboundMessage,
