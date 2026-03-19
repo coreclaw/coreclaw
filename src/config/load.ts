@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import dotenv from "dotenv";
 import { ConfigSchema, type Config } from "./schema.js";
+import { materializeProfilesConfig } from "../profiles/resolve.js";
 
 const parseCsv = (value?: string) =>
   value
@@ -324,5 +325,8 @@ export const loadConfig = (): Config => {
     throw new Error(`Invalid config: ${parsed.error.message}`);
   }
 
-  return parsed.data;
+  return {
+    ...parsed.data,
+    profiles: materializeProfilesConfig(parsed.data, { instanceRoot: root })
+  };
 };

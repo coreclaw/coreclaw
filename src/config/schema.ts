@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  WorkclawLlmConfigSchema,
+  WorkclawProfilesConfigSchema,
+  WorkclawToolProfilesSchema
+} from "../profiles/schema.js";
 
 const heartbeatActiveHoursPattern = /^$|^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -8,6 +13,9 @@ export const ConfigSchema = z.object({
   dataDir: z.string().default("data"),
   sqlitePath: z.string().default("data/bot.sqlite"),
   logLevel: z.string().default("info"),
+  llm: WorkclawLlmConfigSchema.prefault({}),
+  toolProfiles: WorkclawToolProfilesSchema,
+  profiles: WorkclawProfilesConfigSchema.prefault({}),
   provider: z
     .object({
       type: z.enum(["openai"]).default("openai"),

@@ -15,13 +15,19 @@ type TestConfigOverrides = Partial<
     | "heartbeat"
     | "scheduler"
     | "bus"
-    | "observability"
-    | "slo"
-    | "isolation"
-    | "webhook"
-    | "cli"
+      | "observability"
+      | "slo"
+      | "isolation"
+      | "llm"
+      | "toolProfiles"
+      | "profiles"
+      | "webhook"
+      | "cli"
   >
 > & {
+  llm?: Partial<Config["llm"]>;
+  toolProfiles?: Config["toolProfiles"];
+  profiles?: Partial<Config["profiles"]>;
   provider?: Partial<Config["provider"]>;
   heartbeat?: Partial<Config["heartbeat"]>;
   scheduler?: Partial<Config["scheduler"]>;
@@ -44,6 +50,40 @@ export const createConfig = (
     dataDir,
     sqlitePath: path.join(dataDir, "bot.sqlite"),
     logLevel: "info",
+    llm: {
+      defaultProfile: "default",
+      profiles: {
+        default: {
+          provider: "openai",
+          model: "gpt-4o-mini"
+        }
+      }
+    },
+    toolProfiles: {
+      default: {
+        allow: [],
+        deny: []
+      }
+    },
+    profiles: {
+      defaults: {
+        workspaceRoot: path.join(workspaceDir, "profiles"),
+        stateRoot: path.join(dataDir, "profiles"),
+        llmProfile: "default",
+        toolProfile: "default"
+      },
+      list: [
+        {
+          id: "main",
+          name: "Main",
+          role: "general",
+          workspace: workspaceDir,
+          stateDir: dataDir,
+          llmProfile: "default",
+          toolProfile: "default"
+        }
+      ]
+    },
     provider: {
       type: "openai",
       apiKey: "test-key",
@@ -150,12 +190,33 @@ export const createConfig = (
     cli: { enabled: false }
   };
 
-  return {
-    ...base,
-    ...overrides,
-    provider: { ...base.provider, ...(overrides.provider ?? {}) },
-    heartbeat: { ...base.heartbeat, ...(overrides.heartbeat ?? {}) },
-    scheduler: { ...base.scheduler, ...(overrides.scheduler ?? {}) },
+    return {
+      ...base,
+      ...overrides,
+      llm: {
+        ...base.llm,
+        ...(overrides.llm ?? {}),
+        profiles: {
+          ...base.llm.profiles,
+          ...(overrides.llm?.profiles ?? {})
+        }
+      },
+      toolProfiles: {
+        ...base.toolProfiles,
+        ...(overrides.toolProfiles ?? {})
+      },
+      profiles: {
+        ...base.profiles,
+        ...(overrides.profiles ?? {}),
+        defaults: {
+          ...(base.profiles.defaults ?? {}),
+          ...(overrides.profiles?.defaults ?? {})
+        },
+        list: overrides.profiles?.list ?? base.profiles.list
+      },
+      provider: { ...base.provider, ...(overrides.provider ?? {}) },
+      heartbeat: { ...base.heartbeat, ...(overrides.heartbeat ?? {}) },
+      scheduler: { ...base.scheduler, ...(overrides.scheduler ?? {}) },
     bus: { ...base.bus, ...(overrides.bus ?? {}) },
     observability: {
       ...base.observability,
