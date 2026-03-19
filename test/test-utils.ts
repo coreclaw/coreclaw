@@ -22,6 +22,7 @@ type TestConfigOverrides = Partial<
       | "toolProfiles"
       | "profiles"
       | "packs"
+      | "bindings"
       | "webhook"
       | "cli"
   >
@@ -30,6 +31,7 @@ type TestConfigOverrides = Partial<
   toolProfiles?: Config["toolProfiles"];
   profiles?: Partial<Config["profiles"]>;
   packs?: Partial<Config["packs"]>;
+  bindings?: Config["bindings"];
   provider?: Partial<Config["provider"]>;
   heartbeat?: Partial<Config["heartbeat"]>;
   scheduler?: Partial<Config["scheduler"]>;
@@ -67,6 +69,7 @@ export const createConfig = (
         deny: []
       }
     },
+    bindings: [],
     packs: {
       enabledRoots: [path.join(workspaceDir, ".workclaw", "packs")],
       allow: [],
@@ -213,6 +216,7 @@ export const createConfig = (
         ...base.toolProfiles,
         ...(overrides.toolProfiles ?? {})
       },
+      bindings: overrides.bindings ?? base.bindings,
       packs: {
         ...base.packs,
         ...(overrides.packs ?? {})

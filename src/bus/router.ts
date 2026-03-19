@@ -5,6 +5,8 @@ import type { ContextBuilder } from "../agent/context.js";
 import type { AgentRuntime } from "../agent/runtime.js";
 import { BusDeferMessageError, type MessageBus } from "./bus.js";
 import type { Config } from "../config/schema.js";
+import { resolveBinding } from "../bindings/resolve.js";
+import type { WorkclawEvent, WorkclawRoutingHints } from "../bindings/types.js";
 import type { Logger } from "pino";
 import type { SkillIndexEntry } from "../skills/types.js";
 import { compactConversation } from "../agent/compact.js";
@@ -19,6 +21,7 @@ import type { IsolatedToolRuntime } from "../isolation/runtime.js";
 import type { McpReloadRequest, McpReloadResult } from "../tools/registry.js";
 import type { RuntimeTelemetry } from "../observability/telemetry.js";
 import type { HeartbeatController } from "../heartbeat/service.js";
+import { enqueueOutboundAction } from "../outbound/queue.js";
 
 class SerialQueue {
   private tail = Promise.resolve();
@@ -166,7 +169,10 @@ export class ConversationRouter {
   }
 
   private async processMessage(message: InboundMessage) {
-    const requestedProfileId = this.resolveConversationProfileId(message);
+    const event = this.normalizeInboundEvent(message);
+    const routingHints = this.extractRoutingHints(message);
+    const binding = resolveBinding(event, this.config.bindings, routingHints);
+    const requestedProfileId = binding?.profileId ?? this.resolveConversationProfileId(message);
     const chat = this.storage.upsertChat({
       profileId: requestedProfileId,
       channel: message.channel,
@@ -372,6 +378,33 @@ export class ConversationRouter {
       createdAt: nowIso(),
       replyToId: message.id
     };
+    if (binding && binding.action.outbound.targetMode !== "none") {
+      const targetSurface =
+        binding.action.outbound.targetMode === "explicit-target"
+          ? binding.action.outbound.surface ?? event.surface
+          : event.surface;
+      enqueueOutboundAction(this.storage, {
+        sourceEventId: event.id,
+        bindingId: binding.bindingId,
+        profileId: binding.profileId,
+        targetSurface,
+        targetSourceKey:
+          binding.action.outbound.targetMode === "explicit-target"
+            ? binding.action.outbound.sourceKey ?? null
+            : event.sourceKey,
+        targetThreadKey: binding.action.outbound.threadKey ?? binding.action.threadKey ?? event.threadKey,
+        targetChannelKey:
+          binding.action.outbound.targetMode === "explicit-target"
+            ? binding.action.outbound.channelKey ?? null
+            : event.channelKey,
+        payload: {
+          content: responseContent,
+          replyToId: message.id,
+          eventId: event.id
+        }
+      });
+    }
+
     if (isHeartbeatRunMode(runMode)) {
       const delivery = this.handleHeartbeatDelivery({
         message,
@@ -386,7 +419,15 @@ export class ConversationRouter {
         this.bus.publishOutbound(outbound);
       }
     } else {
-      this.bus.publishOutbound(outbound);
+      const shouldSendImmediateReply =
+        !binding ||
+        (binding.action.outbound.targetMode !== "none" &&
+          (binding.action.outbound.targetMode === "reply-to-event" ||
+            (binding.action.outbound.targetMode === "explicit-target" &&
+              (binding.action.outbound.surface ?? event.surface) === message.channel)));
+      if (shouldSendImmediateReply && binding?.action.replyMode !== "silent") {
+        this.bus.publishOutbound(outbound);
+      }
       if (shouldWakeHeartbeatAfterRun(runMode)) {
         this.wakeHeartbeat?.("router:message-processed");
       }
@@ -414,6 +455,64 @@ export class ConversationRouter {
       return requested;
     }
     return this.storage.getChat(message.channel, message.chatId)?.profileId ?? "main";
+  }
+
+  private extractRoutingHints(message: InboundMessage): WorkclawRoutingHints | undefined {
+    const profileId =
+      typeof message.metadata?.profileId === "string" && message.metadata.profileId.trim()
+        ? message.metadata.profileId.trim()
+        : undefined;
+    const bindingId =
+      typeof message.metadata?.bindingId === "string" && message.metadata.bindingId.trim()
+        ? message.metadata.bindingId.trim()
+        : undefined;
+    const suppressOutbound = message.metadata?.suppressOutbound === true ? true : undefined;
+    if (!profileId && !bindingId && suppressOutbound === undefined) {
+      return undefined;
+    }
+    return { profileId, bindingId, suppressOutbound };
+  }
+
+  private normalizeInboundEvent(message: InboundMessage): WorkclawEvent {
+    const metadata = message.metadata ?? {};
+    const payload =
+      metadata.payload && typeof metadata.payload === "object"
+        ? (metadata.payload as Record<string, unknown>)
+        : { content: message.content };
+    return {
+      id: message.id,
+      surface:
+        typeof metadata.surface === "string" && metadata.surface.trim()
+          ? metadata.surface.trim()
+          : message.channel,
+      event:
+        typeof metadata.event === "string" && metadata.event.trim()
+          ? metadata.event.trim()
+          : "message.received",
+      sourceKey:
+        typeof metadata.sourceKey === "string" && metadata.sourceKey.trim()
+          ? metadata.sourceKey.trim()
+          : `${message.channel}:${message.chatId}`,
+      projectKey: typeof metadata.projectKey === "string" ? metadata.projectKey : undefined,
+      repoKey: typeof metadata.repoKey === "string" ? metadata.repoKey : undefined,
+      threadKey: typeof metadata.threadKey === "string" ? metadata.threadKey : undefined,
+      senderKey:
+        typeof metadata.senderKey === "string" ? metadata.senderKey : `user:${message.senderId}`,
+      channelKey:
+        typeof metadata.channelKey === "string"
+          ? metadata.channelKey
+          : `${message.channel}:${message.chatId}`,
+      createdAt: message.createdAt,
+      correlationId: typeof metadata.correlationId === "string" ? metadata.correlationId : undefined,
+      trustLevel:
+        metadata.trustLevel === "trusted" ||
+        metadata.trustLevel === "verified" ||
+        metadata.trustLevel === "untrusted"
+          ? metadata.trustLevel
+          : undefined,
+      metadata: metadata as Record<string, unknown>,
+      payload
+    };
   }
 
   private resolveSkills(profileId?: string): SkillIndexEntry[] {
