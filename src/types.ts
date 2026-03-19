@@ -83,6 +83,15 @@ export type OutboundActionRecord = {
   updatedAt: string;
 };
 
+export type TeamOverlayRecord = {
+  id: string;
+  name: string;
+  workspaceDir: string;
+  manifestJson: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ConversationState = {
   chatFk: string;
   summary: string;

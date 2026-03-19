@@ -249,5 +249,18 @@ export const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_outbound_actions_profile
         ON outbound_actions(profile_id, created_at);
     `
+  },
+  {
+    id: 11,
+    sql: `
+      CREATE TABLE IF NOT EXISTS team_overlays (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        workspace_dir TEXT NOT NULL,
+        manifest_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `
   }
 ];

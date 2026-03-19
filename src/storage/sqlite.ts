@@ -13,6 +13,7 @@ import type {
   PackInstallRecord,
   ProfileRecord,
   ProfilePackEnablementRecord,
+  TeamOverlayRecord,
   TaskRunRecord,
   TaskRecord
 } from "../types.js";
@@ -1295,6 +1296,54 @@ export class SqliteStorage {
       );
   }
 
+  upsertTeamOverlay(params: {
+    id: string;
+    name: string;
+    workspaceDir: string;
+    manifestJson: string;
+    createdAt?: string;
+    updatedAt?: string;
+  }): TeamOverlayRecord {
+    const createdAt = params.createdAt ?? nowIso();
+    const updatedAt = params.updatedAt ?? createdAt;
+    this.db
+      .prepare(
+        "INSERT INTO team_overlays(id, name, workspace_dir, manifest_json, created_at, updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, workspace_dir=excluded.workspace_dir, manifest_json=excluded.manifest_json, updated_at=excluded.updated_at"
+      )
+      .run(params.id, params.name, params.workspaceDir, params.manifestJson, createdAt, updatedAt);
+    return this.getTeamOverlay(params.id)!;
+  }
+
+  getTeamOverlay(id: string): TeamOverlayRecord | null {
+    const row = this.db
+      .prepare("SELECT * FROM team_overlays WHERE id = ?")
+      .get(id) as
+      | {
+          id: string;
+          name: string;
+          workspace_dir: string;
+          manifest_json: string;
+          created_at: string;
+          updated_at: string;
+        }
+      | undefined;
+    return row ? this.mapTeamOverlayRow(row) : null;
+  }
+
+  listTeamOverlays(limit = 100): TeamOverlayRecord[] {
+    const rows = this.db
+      .prepare("SELECT * FROM team_overlays ORDER BY id ASC LIMIT ?")
+      .all(limit) as Array<{
+      id: string;
+      name: string;
+      workspace_dir: string;
+      manifest_json: string;
+      created_at: string;
+      updated_at: string;
+    }>;
+    return rows.map((row) => this.mapTeamOverlayRow(row));
+  }
+
   setChatRole(chatFk: string, role: "admin" | "normal") {
     this.db.prepare("UPDATE chats SET role = ? WHERE id = ?").run(role, chatFk);
   }
@@ -1875,6 +1924,24 @@ export class SqliteStorage {
       deliveryState: row.delivery_state,
       retryCount: row.retry_count,
       nextAttemptAt: row.next_attempt_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+
+  private mapTeamOverlayRow(row: {
+    id: string;
+    name: string;
+    workspace_dir: string;
+    manifest_json: string;
+    created_at: string;
+    updated_at: string;
+  }): TeamOverlayRecord {
+    return {
+      id: row.id,
+      name: row.name,
+      workspaceDir: row.workspace_dir,
+      manifestJson: row.manifest_json,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
