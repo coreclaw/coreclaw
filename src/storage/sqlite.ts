@@ -9,6 +9,7 @@ import type {
   ChatRecord,
   ConversationState,
   InboundMessage,
+  OutboundActionRecord,
   PackInstallRecord,
   ProfileRecord,
   ProfilePackEnablementRecord,
@@ -1155,6 +1156,145 @@ export class SqliteStorage {
     return rows.map((row) => this.mapProfilePackEnablementRow(row));
   }
 
+  createOutboundAction(params: {
+    id?: string;
+    sourceEventId?: string | null;
+    bindingId?: string | null;
+    profileId: string;
+    targetSurface: string;
+    targetSourceKey?: string | null;
+    targetThreadKey?: string | null;
+    targetChannelKey?: string | null;
+    dedupeKey?: string | null;
+    payloadJson: string;
+    deliveryState?: OutboundActionRecord["deliveryState"];
+    retryCount?: number;
+    nextAttemptAt?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
+  }): OutboundActionRecord {
+    const id = params.id ?? newId();
+    const createdAt = params.createdAt ?? nowIso();
+    const updatedAt = params.updatedAt ?? createdAt;
+    this.db
+      .prepare(
+        "INSERT INTO outbound_actions(id, source_event_id, binding_id, profile_id, target_surface, target_source_key, target_thread_key, target_channel_key, dedupe_key, payload_json, delivery_state, retry_count, next_attempt_at, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+      )
+      .run(
+        id,
+        params.sourceEventId ?? null,
+        params.bindingId ?? null,
+        params.profileId,
+        params.targetSurface,
+        params.targetSourceKey ?? null,
+        params.targetThreadKey ?? null,
+        params.targetChannelKey ?? null,
+        params.dedupeKey ?? null,
+        params.payloadJson,
+        params.deliveryState ?? "queued",
+        params.retryCount ?? 0,
+        params.nextAttemptAt ?? null,
+        createdAt,
+        updatedAt
+      );
+    return this.getOutboundAction(id)!;
+  }
+
+  getOutboundAction(id: string): OutboundActionRecord | null {
+    const row = this.db
+      .prepare("SELECT * FROM outbound_actions WHERE id = ?")
+      .get(id) as
+      | {
+          id: string;
+          source_event_id: string | null;
+          binding_id: string | null;
+          profile_id: string;
+          target_surface: string;
+          target_source_key: string | null;
+          target_thread_key: string | null;
+          target_channel_key: string | null;
+          dedupe_key: string | null;
+          payload_json: string;
+          delivery_state: OutboundActionRecord["deliveryState"];
+          retry_count: number;
+          next_attempt_at: string | null;
+          created_at: string;
+          updated_at: string;
+        }
+      | undefined;
+    return row ? this.mapOutboundActionRow(row) : null;
+  }
+
+  listOutboundActions(params: {
+    profileId?: string;
+    deliveryState?: OutboundActionRecord["deliveryState"];
+    limit?: number;
+  } = {}): OutboundActionRecord[] {
+    const limit = params.limit ?? 100;
+    const rows = (params.profileId && params.deliveryState
+      ? this.db
+          .prepare(
+            "SELECT * FROM outbound_actions WHERE profile_id = ? AND delivery_state = ? ORDER BY created_at DESC LIMIT ?"
+          )
+          .all(params.profileId, params.deliveryState, limit)
+      : params.profileId
+        ? this.db
+            .prepare(
+              "SELECT * FROM outbound_actions WHERE profile_id = ? ORDER BY created_at DESC LIMIT ?"
+            )
+            .all(params.profileId, limit)
+        : params.deliveryState
+          ? this.db
+              .prepare(
+                "SELECT * FROM outbound_actions WHERE delivery_state = ? ORDER BY created_at DESC LIMIT ?"
+              )
+              .all(params.deliveryState, limit)
+          : this.db
+              .prepare("SELECT * FROM outbound_actions ORDER BY created_at DESC LIMIT ?")
+              .all(limit)) as Array<{
+      id: string;
+      source_event_id: string | null;
+      binding_id: string | null;
+      profile_id: string;
+      target_surface: string;
+      target_source_key: string | null;
+      target_thread_key: string | null;
+      target_channel_key: string | null;
+      dedupe_key: string | null;
+      payload_json: string;
+      delivery_state: OutboundActionRecord["deliveryState"];
+      retry_count: number;
+      next_attempt_at: string | null;
+      created_at: string;
+      updated_at: string;
+    }>;
+    return rows.map((row) => this.mapOutboundActionRow(row));
+  }
+
+  updateOutboundAction(params: {
+    id: string;
+    deliveryState?: OutboundActionRecord["deliveryState"];
+    retryCount?: number;
+    nextAttemptAt?: string | null;
+    updatedAt?: string;
+  }): void {
+    const current = this.getOutboundAction(params.id);
+    if (!current) {
+      return;
+    }
+    this.db
+      .prepare(
+        "UPDATE outbound_actions SET delivery_state = ?, retry_count = ?, next_attempt_at = ?, updated_at = ? WHERE id = ?"
+      )
+      .run(
+        params.deliveryState ?? current.deliveryState,
+        params.retryCount ?? current.retryCount,
+        params.nextAttemptAt === undefined ? current.nextAttemptAt : params.nextAttemptAt,
+        params.updatedAt ?? nowIso(),
+        params.id
+      );
+  }
+
   setChatRole(chatFk: string, role: "admin" | "normal") {
     this.db.prepare("UPDATE chats SET role = ? WHERE id = ?").run(role, chatFk);
   }
@@ -1701,6 +1841,42 @@ export class SqliteStorage {
       enabled: row.enabled === 1,
       source: row.source,
       enabledAt: row.enabled_at
+    };
+  }
+
+  private mapOutboundActionRow(row: {
+    id: string;
+    source_event_id: string | null;
+    binding_id: string | null;
+    profile_id: string;
+    target_surface: string;
+    target_source_key: string | null;
+    target_thread_key: string | null;
+    target_channel_key: string | null;
+    dedupe_key: string | null;
+    payload_json: string;
+    delivery_state: OutboundActionRecord["deliveryState"];
+    retry_count: number;
+    next_attempt_at: string | null;
+    created_at: string;
+    updated_at: string;
+  }): OutboundActionRecord {
+    return {
+      id: row.id,
+      sourceEventId: row.source_event_id,
+      bindingId: row.binding_id,
+      profileId: row.profile_id,
+      targetSurface: row.target_surface,
+      targetSourceKey: row.target_source_key,
+      targetThreadKey: row.target_thread_key,
+      targetChannelKey: row.target_channel_key,
+      dedupeKey: row.dedupe_key,
+      payloadJson: row.payload_json,
+      deliveryState: row.delivery_state,
+      retryCount: row.retry_count,
+      nextAttemptAt: row.next_attempt_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
     };
   }
 }

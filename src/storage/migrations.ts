@@ -221,5 +221,33 @@ export const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_profile_pack_enablements_pack
         ON profile_pack_enablements(pack_id);
     `
+  },
+  {
+    id: 10,
+    sql: `
+      CREATE TABLE IF NOT EXISTS outbound_actions (
+        id TEXT PRIMARY KEY,
+        source_event_id TEXT,
+        binding_id TEXT,
+        profile_id TEXT NOT NULL,
+        target_surface TEXT NOT NULL,
+        target_source_key TEXT,
+        target_thread_key TEXT,
+        target_channel_key TEXT,
+        dedupe_key TEXT,
+        payload_json TEXT NOT NULL,
+        delivery_state TEXT NOT NULL,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_outbound_actions_state
+        ON outbound_actions(delivery_state, next_attempt_at);
+
+      CREATE INDEX IF NOT EXISTS idx_outbound_actions_profile
+        ON outbound_actions(profile_id, created_at);
+    `
   }
 ];

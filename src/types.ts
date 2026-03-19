@@ -65,6 +65,24 @@ export type ProfilePackEnablementRecord = {
   enabledAt: string;
 };
 
+export type OutboundActionRecord = {
+  id: string;
+  sourceEventId: string | null;
+  bindingId: string | null;
+  profileId: string;
+  targetSurface: string;
+  targetSourceKey: string | null;
+  targetThreadKey: string | null;
+  targetChannelKey: string | null;
+  dedupeKey: string | null;
+  payloadJson: string;
+  deliveryState: "queued" | "sending" | "sent" | "failed";
+  retryCount: number;
+  nextAttemptAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ConversationState = {
   chatFk: string;
   summary: string;
