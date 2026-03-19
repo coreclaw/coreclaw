@@ -8,7 +8,7 @@ export class ProfileRuntimeRegistry {
   private readonly profilesById: Map<string, ResolvedWorkclawProfile>;
 
   constructor(
-    config: Pick<Config, "workspaceDir" | "dataDir" | "profiles" | "llm" | "toolProfiles">,
+    config: Pick<Config, "workspaceDir" | "dataDir" | "profiles" | "llm" | "toolProfiles" | "teams">,
     options: { instanceRoot?: string } = {}
   ) {
     const instanceRoot = path.resolve(

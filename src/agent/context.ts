@@ -20,6 +20,15 @@ import {
 const readIfExists = (filePath: string) =>
   fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf-8").trim() : "";
 
+const TEAM_OVERLAY_FILES = [
+  "TEAM.md",
+  "PROJECTS.md",
+  "OWNERSHIP.md",
+  "GLOSSARY.md",
+  "PROCESS.md",
+  path.join("memory", "MEMORY.md")
+];
+
 const renderSkillsIndex = (skills: SkillIndexEntry[], enabledSkills: Set<string>) => {
   if (skills.length === 0) {
     return "(no skills available)";
@@ -197,6 +206,18 @@ export class ContextBuilder {
     const toolsPolicy = readIfExists(toolsPath);
     const globalMemory = readIfExists(globalMemoryPath);
     const chatMemory = readIfExists(chatMemoryPath);
+    const teamOverlaySections = profile.teamWorkspaces
+      .flatMap((workspace) =>
+        TEAM_OVERLAY_FILES.map((relativePath) => {
+          const filePath = resolveWorkspacePath(workspace, relativePath);
+          const content = readIfExists(filePath);
+          if (!content) {
+            return null;
+          }
+          return `# Team Overlay ${path.basename(relativePath, path.extname(relativePath))}\n${content}`;
+        })
+      )
+      .filter((section): section is string => Boolean(section));
 
     const runMode = params.runMode ?? resolveRunMode(params.inbound);
     const state = this.storage.getConversationState(params.chat.id);
@@ -212,6 +233,9 @@ export class ContextBuilder {
     }
     if (userProfile) {
       systemSections.push(`# User Profile\n${userProfile}`);
+    }
+    if (teamOverlaySections.length > 0) {
+      systemSections.push(teamOverlaySections.join("\n\n"));
     }
     if (globalMemory) {
       systemSections.push(`# Global Memory\n${globalMemory}`);

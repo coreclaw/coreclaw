@@ -15,7 +15,7 @@ import { main } from "./main.js";
 import { runDoctorChecks } from "./doctor.js";
 import { runWorkclawInit } from "./install/init.js";
 import { runProfileAdd } from "./install/profile-init.js";
-import { scaffoldTeamWorkspace } from "./install/team-init.js";
+import { runTeamInit } from "./install/team-init.js";
 import { runPreflightChecks } from "./preflight.js";
 
 export type CliBranding = {
@@ -178,9 +178,7 @@ export const runCli = async (
     if (!teamId) {
       throw new Error("Missing team id for 'workclaw team init'.");
     }
-    const workspaceDir = path.join(process.cwd(), "workspace", "teams", teamId);
-    scaffoldTeamWorkspace(workspaceDir);
-    process.stdout.write(`${JSON.stringify({ teamId, workspaceDir }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(runTeamInit(teamId), null, 2)}\n`);
     return;
   }
   if (args.includes("--help") || args.includes("-h")) {

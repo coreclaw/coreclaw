@@ -11,6 +11,7 @@ import type {
   WorkclawProfilesConfig,
   WorkclawSandboxPolicy
 } from "./types.js";
+import { applyTeamOverlay, resolveTeamOverlays } from "../teams/overlay.js";
 
 type ResolveProfilesOptions = {
   instanceRoot?: string;
@@ -97,13 +98,14 @@ export const materializeProfilesConfig = (
 };
 
 export const resolveProfilesConfig = (
-  config: Pick<Config, "workspaceDir" | "dataDir" | "profiles" | "llm" | "toolProfiles">,
+  config: Pick<Config, "workspaceDir" | "dataDir" | "profiles" | "llm" | "toolProfiles" | "teams">,
   options: ResolveProfilesOptions = {}
 ): ResolvedWorkclawProfile[] => {
   const instanceRoot = path.resolve(options.instanceRoot ?? process.cwd());
   const profilesConfig = materializeProfilesConfig(config, options);
   const defaults = profilesConfig.defaults ?? {};
   const list = profilesConfig.list ?? [];
+  const teamOverlays = resolveTeamOverlays(config, instanceRoot);
   const workspaceRoot = defaults.workspaceRoot ?? path.join(config.workspaceDir, "profiles");
   const stateRoot = defaults.stateRoot ?? path.join(config.dataDir, "profiles");
   const ids = new Set<string>();
@@ -124,10 +126,19 @@ export const resolveProfilesConfig = (
       throw new Error(`Profile ${profile.id} references missing toolProfile: ${toolProfile}`);
     }
 
-    return {
+    const teamIds = [
+      ...new Set([
+        ...(profile.teams ?? []),
+        ...teamOverlays.filter((team) => team.profiles.includes(profile.id)).map((team) => team.id)
+      ])
+    ];
+
+    let resolvedProfile: ResolvedWorkclawProfile = {
       id: profile.id,
       name: profile.name,
       role: profile.role,
+      teamIds,
+      teamWorkspaces: [],
       workspaceDir: resolveConfigPath(instanceRoot, profile.workspace ?? path.join(workspaceRoot, profile.id)),
       stateDir: resolveConfigPath(instanceRoot, profile.stateDir ?? path.join(stateRoot, profile.id)),
       llmProfile,
@@ -140,7 +151,13 @@ export const resolveProfilesConfig = (
       surfaces: mergeSurfacePolicy(defaults.surfaces, profile.surfaces),
       metadata: mergeObjects<Record<string, string>>(defaults.metadata, profile.metadata),
       disabled: profile.disabled ?? false
-    } satisfies ResolvedWorkclawProfile;
+    };
+
+    for (const team of teamOverlays.filter((entry) => teamIds.includes(entry.id))) {
+      resolvedProfile = applyTeamOverlay(resolvedProfile, team);
+    }
+
+    return resolvedProfile satisfies ResolvedWorkclawProfile;
   });
 
   ensureUniquePaths(resolved, "workspaceDir");

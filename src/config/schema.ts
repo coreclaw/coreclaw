@@ -6,6 +6,7 @@ import {
 } from "../profiles/schema.js";
 import { WorkclawPacksConfigSchema } from "../packs/schema.js";
 import { WorkclawBindingsSchema } from "../bindings/schema.js";
+import { WorkclawTeamsConfigSchema } from "../teams/schema.js";
 
 const heartbeatActiveHoursPattern = /^$|^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -19,6 +20,7 @@ export const ConfigSchema = z.object({
   toolProfiles: WorkclawToolProfilesSchema,
   profiles: WorkclawProfilesConfigSchema.prefault({}),
   packs: WorkclawPacksConfigSchema.prefault({}),
+  teams: WorkclawTeamsConfigSchema.prefault({}),
   bindings: WorkclawBindingsSchema,
   provider: z
     .object({

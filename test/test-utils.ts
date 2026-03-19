@@ -22,6 +22,7 @@ type TestConfigOverrides = Partial<
       | "toolProfiles"
       | "profiles"
       | "packs"
+      | "teams"
       | "bindings"
       | "webhook"
       | "cli"
@@ -31,6 +32,7 @@ type TestConfigOverrides = Partial<
   toolProfiles?: Config["toolProfiles"];
   profiles?: Partial<Config["profiles"]>;
   packs?: Partial<Config["packs"]>;
+  teams?: Partial<Config["teams"]>;
   bindings?: Config["bindings"];
   provider?: Partial<Config["provider"]>;
   heartbeat?: Partial<Config["heartbeat"]>;
@@ -75,6 +77,9 @@ export const createConfig = (
       allow: [],
       deny: [],
       strict: true
+    },
+    teams: {
+      list: []
     },
     profiles: {
       defaults: {
@@ -221,6 +226,11 @@ export const createConfig = (
         ...base.packs,
         ...(overrides.packs ?? {})
       },
+      teams: {
+        ...base.teams,
+        ...(overrides.teams ?? {}),
+        list: overrides.teams?.list ?? base.teams.list
+      },
       profiles: {
         ...base.profiles,
         ...(overrides.profiles ?? {}),
@@ -257,6 +267,7 @@ export const createStorageFixture = (overrides: TestConfigOverrides = {}) => {
   fs.mkdirSync(dataDir, { recursive: true });
   fs.mkdirSync(path.join(workspaceDir, "memory"), { recursive: true });
   fs.mkdirSync(path.join(workspaceDir, "skills"), { recursive: true });
+  fs.mkdirSync(path.join(workspaceDir, "teams"), { recursive: true });
 
   const config = createConfig(workspaceDir, dataDir, overrides);
   const storage = new SqliteStorage(config);

@@ -81,6 +81,7 @@ export const WorkclawProfileConfigSchema = z
     id: z.string().regex(WORKCLAW_PROFILE_ID_PATTERN, "profiles.list[].id is invalid"),
     name: z.string().min(1),
     role: z.string().min(1),
+    teams: StringArraySchema.optional(),
     workspace: z.string().optional(),
     stateDir: z.string().optional(),
     llmProfile: z.string().optional(),

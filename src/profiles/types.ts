@@ -63,6 +63,7 @@ export type WorkclawProfileConfig = {
   id: string;
   name: string;
   role: WorkclawRoleId;
+  teams?: string[];
   workspace?: string;
   stateDir?: string;
   llmProfile?: string;
@@ -103,6 +104,8 @@ export type ResolvedWorkclawProfile = {
   id: string;
   name: string;
   role: WorkclawRoleId;
+  teamIds: string[];
+  teamWorkspaces: string[];
   workspaceDir: string;
   stateDir: string;
   llmProfile?: string;

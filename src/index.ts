@@ -5,7 +5,7 @@ export { runCli, CORECLAW_CLI_BRANDING, type CliBranding } from "./bin.js";
 export { runDoctorChecks, type DoctorReport } from "./doctor.js";
 export { runWorkclawInit } from "./install/init.js";
 export { scaffoldProfileWorkspace, runProfileAdd } from "./install/profile-init.js";
-export { scaffoldTeamWorkspace } from "./install/team-init.js";
+export { scaffoldTeamWorkspace, runTeamInit } from "./install/team-init.js";
 export {
   runProfilesList,
   runProfilesResolve,

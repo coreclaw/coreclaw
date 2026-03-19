@@ -19,6 +19,7 @@ import { McpManager } from "./mcp/manager.js";
 import { readMcpConfigFile } from "./mcp/config.js";
 import { SkillLoader } from "./skills/loader.js";
 import { ProfileRuntimeRegistry } from "./profiles/runtime.js";
+import { resolveTeamOverlays } from "./teams/overlay.js";
 import { CliChannel } from "./channels/cli.js";
 import { WebhookChannel } from "./channels/webhook.js";
 import type { Channel } from "./channels/base.js";
@@ -226,6 +227,9 @@ export const createCoreclawApp = async (
   ensureDir(config.workspaceDir);
   const profileRegistry = new ProfileRuntimeRegistry(config);
   profileRegistry.ensureDirectories();
+  for (const team of resolveTeamOverlays(config, process.cwd())) {
+    ensureDir(team.workspaceDir);
+  }
 
   const logger = options.logger ?? createLogger(config);
   const telemetry = new RuntimeTelemetry();
