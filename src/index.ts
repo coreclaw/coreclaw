@@ -10,7 +10,10 @@ export {
   runProfilesList,
   runProfilesResolve,
   runPacksList,
-  runPackInfo
+  runPackInfo,
+  runPackInstall,
+  runPackEnable,
+  runPackDisable
 } from "./cli-management.js";
 
 export { loadConfig } from "./config/load.js";

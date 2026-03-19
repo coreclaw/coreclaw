@@ -2,7 +2,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { runPackInfo, runPacksList, runProfilesList, runProfilesResolve } from "./cli-management.js";
+import {
+  runPackDisable,
+  runPackEnable,
+  runPackInfo,
+  runPackInstall,
+  runPacksList,
+  runProfilesList,
+  runProfilesResolve
+} from "./cli-management.js";
 import { main } from "./main.js";
 import { runDoctorChecks } from "./doctor.js";
 import { runWorkclawInit } from "./install/init.js";
@@ -30,8 +38,11 @@ Usage:
   ${branding.commandName} profiles list
   ${branding.commandName} profiles resolve <id>
   ${branding.commandName} profile add <id>
-  ${branding.commandName} packs list
-  ${branding.commandName} packs info <id>
+  ${branding.commandName} pack list
+  ${branding.commandName} pack info <id>
+  ${branding.commandName} pack install <id>
+  ${branding.commandName} pack enable <id> --profile <profileId>
+  ${branding.commandName} pack disable <id> --profile <profileId>
   ${branding.commandName} team init <id>
 
 Options:
@@ -117,16 +128,44 @@ export const runCli = async (
     process.stdout.write(`${JSON.stringify(runProfileAdd(profileId), null, 2)}\n`);
     return;
   }
-  if (args[0] === "packs" && args[1] === "list") {
+  if ((args[0] === "packs" || args[0] === "pack") && args[1] === "list") {
     process.stdout.write(`${JSON.stringify(runPacksList(), null, 2)}\n`);
     return;
   }
-  if (args[0] === "packs" && args[1] === "info") {
+  if ((args[0] === "packs" || args[0] === "pack") && args[1] === "info") {
     const packId = args[2]?.trim();
     if (!packId) {
       throw new Error("Missing pack id for 'workclaw packs info'.");
     }
     process.stdout.write(`${JSON.stringify(runPackInfo(packId), null, 2)}\n`);
+    return;
+  }
+  if ((args[0] === "packs" || args[0] === "pack") && args[1] === "install") {
+    const packId = args[2]?.trim();
+    if (!packId) {
+      throw new Error(`Missing pack id for '${branding.commandName} pack install'.`);
+    }
+    process.stdout.write(`${JSON.stringify(runPackInstall(packId), null, 2)}\n`);
+    return;
+  }
+  if ((args[0] === "packs" || args[0] === "pack") && args[1] === "enable") {
+    const packId = args[2]?.trim();
+    const profileFlagIndex = args.indexOf("--profile");
+    const profileId = profileFlagIndex >= 0 ? args[profileFlagIndex + 1]?.trim() : undefined;
+    if (!packId || !profileId) {
+      throw new Error(`Usage: ${branding.commandName} pack enable <id> --profile <profileId>`);
+    }
+    process.stdout.write(`${JSON.stringify(runPackEnable(packId, profileId), null, 2)}\n`);
+    return;
+  }
+  if ((args[0] === "packs" || args[0] === "pack") && args[1] === "disable") {
+    const packId = args[2]?.trim();
+    const profileFlagIndex = args.indexOf("--profile");
+    const profileId = profileFlagIndex >= 0 ? args[profileFlagIndex + 1]?.trim() : undefined;
+    if (!packId || !profileId) {
+      throw new Error(`Usage: ${branding.commandName} pack disable <id> --profile <profileId>`);
+    }
+    process.stdout.write(`${JSON.stringify(runPackDisable(packId, profileId), null, 2)}\n`);
     return;
   }
   if (args[0] === "init") {

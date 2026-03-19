@@ -46,6 +46,66 @@ const resolvePackPaths = (
   key: "skills" | "mcp" | "templates" | "bootstrap"
 ): string[] => (manifest[key] ?? []).map((entry) => pathStaysWithinRoot(rootDir, entry));
 
+const pathExists = (candidate: string): boolean => fs.existsSync(candidate);
+
+const bundleSkillRoots = (rootDir: string, bundleRoot: string, format: string): string[] => {
+  const candidatesByFormat: Record<string, string[]> = {
+    codex: ["skills", "commands"],
+    claude: ["skills", "commands", ".claude/commands"],
+    cursor: ["skills", "commands", ".cursor/rules", "rules"]
+  };
+  const relativeCandidates = candidatesByFormat[format] ?? ["skills", "commands"];
+  return [bundleRoot, ...relativeCandidates.map((candidate) => path.resolve(bundleRoot, candidate))]
+    .filter((candidate, index, all) => all.indexOf(candidate) === index)
+    .filter((candidate) => pathExists(candidate))
+    .filter((candidate) => !path.relative(rootDir, candidate).startsWith(".."));
+};
+
+const bundleMcpFragments = (rootDir: string, bundleRoot: string): string[] =>
+  [
+    path.resolve(bundleRoot, ".mcp.json"),
+    path.resolve(bundleRoot, "mcp.json"),
+    path.resolve(bundleRoot, "mcp")
+  ]
+    .filter((candidate, index, all) => all.indexOf(candidate) === index)
+    .filter((candidate) => pathExists(candidate))
+    .filter((candidate) => !path.relative(rootDir, candidate).startsWith(".."));
+
+const bundleBootstrapEntries = (rootDir: string, bundleRoot: string): string[] =>
+  [
+    path.resolve(bundleRoot, "settings.json"),
+    path.resolve(bundleRoot, ".claude/settings.json"),
+    path.resolve(bundleRoot, ".cursor/settings.json")
+  ]
+    .filter((candidate, index, all) => all.indexOf(candidate) === index)
+    .filter((candidate) => pathExists(candidate))
+    .filter((candidate) => !path.relative(rootDir, candidate).startsWith(".."));
+
+const resolveBundleImports = (rootDir: string, manifest: WorkclawPackManifest) => {
+  const skillRoots: string[] = [];
+  const mcpFragments: string[] = [];
+  const bootstrapEntries: string[] = [];
+
+  for (const bundle of manifest.bundles ?? []) {
+    const bundleRoot = pathStaysWithinRoot(rootDir, bundle.path);
+    if (bundle.includeSkills !== false) {
+      skillRoots.push(...bundleSkillRoots(rootDir, bundleRoot, bundle.format));
+    }
+    if (bundle.includeMcp !== false) {
+      mcpFragments.push(...bundleMcpFragments(rootDir, bundleRoot));
+    }
+    if (bundle.includeSettings !== false) {
+      bootstrapEntries.push(...bundleBootstrapEntries(rootDir, bundleRoot));
+    }
+  }
+
+  return {
+    skillRoots: [...new Set(skillRoots)],
+    mcpFragments: [...new Set(mcpFragments)],
+    bootstrapEntries: [...new Set(bootstrapEntries)]
+  };
+};
+
 export const resolvePackDiscoveryRoots = (
   config: Pick<Config, "workspaceDir" | "packs">,
   options: { instanceRoot?: string } = {}
@@ -126,16 +186,21 @@ export const discoverWorkclawPacks = (
           ? "denied by packs.deny"
           : undefined;
 
+      const bundleImports = resolveBundleImports(rootDir, manifest);
+
       discovered.push({
         id: manifest.id,
         rootDir,
         sourceRoot,
         manifestPath,
         manifest,
-        skillRoots: resolvePackPaths(rootDir, manifest, "skills"),
-        mcpFragments: resolvePackPaths(rootDir, manifest, "mcp"),
+        skillRoots: [...resolvePackPaths(rootDir, manifest, "skills"), ...bundleImports.skillRoots],
+        mcpFragments: [...resolvePackPaths(rootDir, manifest, "mcp"), ...bundleImports.mcpFragments],
         templateRoots: resolvePackPaths(rootDir, manifest, "templates"),
-        bootstrapEntries: resolvePackPaths(rootDir, manifest, "bootstrap"),
+        bootstrapEntries: [
+          ...resolvePackPaths(rootDir, manifest, "bootstrap"),
+          ...bundleImports.bootstrapEntries
+        ],
         allowed,
         blockedReason,
         warnings

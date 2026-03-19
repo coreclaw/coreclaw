@@ -34,6 +34,36 @@ const extractFrontmatter = (content: string): { meta: SkillMeta | null; body: st
   }
 };
 
+const loadSkillEntry = (params: {
+  skillPath: string;
+  dir: string;
+  fallbackName: string;
+}): SkillIndexEntry | null => {
+  const content = fs.readFileSync(params.skillPath, "utf-8");
+  const { meta, body } = extractFrontmatter(content);
+  const name = meta?.name || params.fallbackName;
+  const description =
+    meta?.description ||
+    body
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line && !line.startsWith("#")) ||
+    `${name} imported skill`;
+  if (!name) {
+    return null;
+  }
+  return {
+    name,
+    description,
+    always: Boolean(meta?.always),
+    requires: meta?.requires,
+    tools: meta?.tools,
+    mcp: meta?.mcp,
+    dir: params.dir,
+    skillPath: params.skillPath
+  };
+};
+
 export class SkillLoader {
   private readonly skillsDirs: string[];
 
@@ -50,26 +80,27 @@ export class SkillLoader {
       }
       const entries = fs
         .readdirSync(skillsDir, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory());
+        .filter((entry) => entry.isDirectory() || entry.isFile());
       for (const entry of entries) {
-        const skillPath = path.join(skillsDir, entry.name, "SKILL.md");
-        if (!fs.existsSync(skillPath)) {
+        const skillPath = entry.isDirectory()
+          ? path.join(skillsDir, entry.name, "SKILL.md")
+          : path.join(skillsDir, entry.name);
+        if (!fs.existsSync(skillPath) || !skillPath.endsWith(".md")) {
           continue;
         }
-        const content = fs.readFileSync(skillPath, "utf-8");
-        const { meta } = extractFrontmatter(content);
-        if (!meta || !meta.name) {
-          continue;
-        }
-        if (seenNames.has(meta.name)) {
-          throw new Error(`Duplicate skill name discovered across roots: ${meta.name}`);
-        }
-        seenNames.add(meta.name);
-        skills.push({
-          ...meta,
-          dir: path.join(skillsDir, entry.name),
-          skillPath
+        const skill = loadSkillEntry({
+          skillPath,
+          dir: entry.isDirectory() ? path.join(skillsDir, entry.name) : skillsDir,
+          fallbackName: entry.isDirectory() ? entry.name : path.basename(entry.name, ".md")
         });
+        if (!skill) {
+          continue;
+        }
+        if (seenNames.has(skill.name)) {
+          throw new Error(`Duplicate skill name discovered across roots: ${skill.name}`);
+        }
+        seenNames.add(skill.name);
+        skills.push(skill);
       }
     }
     return skills;
