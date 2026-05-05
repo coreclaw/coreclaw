@@ -317,7 +317,7 @@ export const createCoreclawApp = async (
       profileId,
       { strict: config.packs.strict }
     );
-    return mergeToolPolicies(configuredProfilePolicy, packState.toolPolicy);
+    return mergeToolPolicies(configuredProfilePolicy, profile?.toolPolicy, packState.toolPolicy);
   };
 
   const listPackMcpFragments = () => {

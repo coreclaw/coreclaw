@@ -116,6 +116,7 @@ export type ResolvedWorkclawProfile = {
   bootstrap: WorkclawBootstrapPolicy;
   scheduler: WorkclawProfileSchedulerPolicy;
   surfaces: WorkclawProfileSurfacePolicy;
+  toolPolicy: WorkclawToolProfile;
   metadata: Record<string, string>;
   disabled: boolean;
 };

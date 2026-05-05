@@ -149,6 +149,7 @@ export const resolveProfilesConfig = (
       bootstrap: mergeObjects<WorkclawBootstrapPolicy>(defaults.bootstrap, profile.bootstrap),
       scheduler: mergeObjects<WorkclawProfileSchedulerPolicy>(defaults.scheduler, profile.scheduler),
       surfaces: mergeSurfacePolicy(defaults.surfaces, profile.surfaces),
+      toolPolicy: {},
       metadata: mergeObjects<Record<string, string>>(defaults.metadata, profile.metadata),
       disabled: profile.disabled ?? false
     };

@@ -42,6 +42,8 @@ test("resolveProfilesConfig applies team overlays to packs and metadata", () => 
     assert.deepEqual(profile.teamIds, ["platform"]);
     assert.ok(profile.enabledPackIds.includes("team-shared"));
     assert.equal(profile.metadata.team, "platform");
+    assert.deepEqual(profile.toolPolicy.allow, ["gitlab"]);
+    assert.deepEqual(profile.toolPolicy.deny, ["github"]);
   } finally {
     fixture.cleanup();
   }

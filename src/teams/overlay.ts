@@ -1,10 +1,30 @@
 import os from "node:os";
 import path from "node:path";
 import type { Config } from "../config/schema.js";
-import type { ResolvedWorkclawProfile } from "../profiles/types.js";
-import type { ResolvedWorkclawTeamOverlay } from "./types.js";
+import type { ResolvedWorkclawProfile, WorkclawToolProfile } from "../profiles/types.js";
+import type { ResolvedWorkclawTeamOverlay, WorkclawTeamOverlayToolPolicy } from "./types.js";
 
 const dedupe = (values: string[] | undefined): string[] => [...new Set(values ?? [])];
+
+const mergeToolPolicy = (
+  base: WorkclawToolProfile | undefined,
+  overlay: WorkclawTeamOverlayToolPolicy | undefined
+): WorkclawToolProfile => {
+  const overlayAllow = overlay?.allow?.filter(Boolean) ?? [];
+  let allow =
+    base?.allow && base.allow.length > 0 ? dedupe(base.allow.filter(Boolean)) : undefined;
+  if (overlayAllow.length > 0) {
+    allow = allow
+      ? allow.filter((entry) => overlayAllow.includes(entry))
+      : [...overlayAllow];
+  }
+
+  const deny = dedupe([...(base?.deny ?? []), ...(overlay?.deny ?? [])].filter(Boolean));
+  return {
+    ...(allow ? { allow } : {}),
+    ...(deny.length > 0 ? { deny } : {})
+  };
+};
 
 export const applyTeamOverlay = (
   profile: ResolvedWorkclawProfile,
@@ -13,11 +33,6 @@ export const applyTeamOverlay = (
   if (!overlay) {
     return profile;
   }
-  const allow =
-    profile.surfaces.allow && overlay.toolPolicy?.allow
-      ? profile.surfaces.allow.filter((entry) => overlay.toolPolicy?.allow?.includes(entry))
-      : profile.surfaces.allow;
-  const deny = dedupe([...(profile.surfaces.deny ?? []), ...(overlay.toolPolicy?.deny ?? [])]);
   return {
     ...profile,
     teamIds: dedupe([...(profile.teamIds ?? []), overlay.id]),
@@ -27,11 +42,7 @@ export const applyTeamOverlay = (
       ...profile.metadata,
       ...(overlay.metadata ?? {})
     },
-    surfaces: {
-      ...profile.surfaces,
-      ...(allow ? { allow } : {}),
-      deny
-    }
+    toolPolicy: mergeToolPolicy(profile.toolPolicy, overlay.toolPolicy)
   };
 };
 

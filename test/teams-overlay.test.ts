@@ -10,7 +10,7 @@ import { resolveProfilesConfig } from "../src/profiles/resolve.js";
 import { migrations } from "../src/storage/migrations.js";
 import { SqliteStorage } from "../src/storage/sqlite.js";
 
-test("applyTeamOverlay appends packs and narrows allow/deny policy", () => {
+test("applyTeamOverlay appends packs and merges tool policy without changing surfaces", () => {
   const fixture = createStorageFixture({
     profiles: {
       list: [
@@ -41,8 +41,10 @@ test("applyTeamOverlay appends packs and narrows allow/deny policy", () => {
       }
     });
     assert.deepEqual(merged.enabledPackIds, ["role-dev-base", "engineering-common"]);
-    assert.deepEqual(merged.surfaces.allow, ["gitlab"]);
-    assert.deepEqual(merged.surfaces.deny, ["slack", "github"]);
+    assert.deepEqual(merged.surfaces.allow, ["gitlab", "github"]);
+    assert.deepEqual(merged.surfaces.deny, ["slack"]);
+    assert.deepEqual(merged.toolPolicy.allow, ["gitlab"]);
+    assert.deepEqual(merged.toolPolicy.deny, ["github"]);
     assert.equal(merged.metadata.team, "core");
   } finally {
     fixture.cleanup();
