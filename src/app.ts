@@ -262,7 +262,6 @@ export const createCoreclawApp = async (
   const storage = new SqliteStorage(config);
   storage.init();
 
-  const skillLoader = new SkillLoader(config.skillsDir);
   const discoveredPacks = discoverWorkclawPacks(config);
   for (const pack of discoveredPacks) {
     recordDiscoveredPackInstall(storage, pack);
@@ -296,13 +295,18 @@ export const createCoreclawApp = async (
   let mcpCircuitOpenUntilMs = 0;
 
   const listSkillsForProfile = (profileId = "main") => {
+    const profile = profileRegistry.get(profileId);
     const packState = loadProfilePackGraph(
       storage,
       discoveredPacks.filter((pack) => pack.allowed),
       profileId,
       { strict: config.packs.strict }
     );
-    const roots = [config.skillsDir, ...packState.skillRoots];
+    const roots = [
+      config.skillsDir,
+      ...(profile ? [path.join(profile.workspaceDir, "skills")] : []),
+      ...packState.skillRoots
+    ];
     return new SkillLoader(roots).listSkills();
   };
 

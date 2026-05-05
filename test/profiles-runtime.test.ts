@@ -364,3 +364,92 @@ test("createCoreclawApp materializes configured profile workspace and state dire
     fixture.cleanup();
   }
 });
+
+test("createCoreclawApp loads skills from the active profile workspace", async () => {
+  const fixture = createStorageFixture({
+    profiles: {
+      defaults: {
+        workspaceRoot: "profiles",
+        stateRoot: "state",
+        llmProfile: "default",
+        toolProfile: "default"
+      },
+      list: [
+        {
+          id: "dev",
+          name: "Developer",
+          role: "dev"
+        }
+      ]
+    },
+    cli: { enabled: false },
+    webhook: { enabled: false },
+    observability: {
+      enabled: false,
+      http: { enabled: false, host: "127.0.0.1", port: 3210 }
+    },
+    bus: {
+      pollMs: 10,
+      batchSize: 20,
+      maxAttempts: 3,
+      retryBackoffMs: 10,
+      maxRetryBackoffMs: 100,
+      processingTimeoutMs: 500,
+      maxPendingInbound: 5_000,
+      maxPendingOutbound: 5_000,
+      overloadPendingThreshold: 2_000,
+      overloadBackoffMs: 500,
+      perChatRateLimitWindowMs: 60_000,
+      perChatRateLimitMax: 120
+    }
+  });
+
+  const devSkillDir = path.join(fixture.rootDir, "profiles", "dev", "skills", "profile-skill");
+  fs.mkdirSync(devSkillDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(devSkillDir, "SKILL.md"),
+    "---\nname: profile-skill\ndescription: from profile\nalways: false\n---\n# Profile Skill\n",
+    "utf-8"
+  );
+
+  try {
+    const app = await createCoreclawApp({
+      config: fixture.config,
+      logger
+    });
+    const outbound: string[] = [];
+    try {
+      app.runtime.provider = new MockProvider(async (req) => {
+        const system = req.messages[0];
+        const content = system && "content" in system ? system.content : "";
+        return {
+          content: content.includes("profile-skill")
+            ? "profile-skill-visible"
+            : "profile-skill-missing"
+        };
+      });
+      app.bus.onOutbound(async (message) => {
+        outbound.push(message.content);
+      });
+      await app.start();
+      app.bus.publishInbound({
+        id: "profile-skill-1",
+        channel: "cli",
+        chatId: "local",
+        senderId: "user",
+        content: "run",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          profileId: "dev"
+        }
+      });
+
+      await waitUntil(() => outbound.length >= 1);
+      assert.equal(outbound[0], "profile-skill-visible");
+    } finally {
+      await app.stop();
+    }
+  } finally {
+    fixture.cleanup();
+  }
+});
