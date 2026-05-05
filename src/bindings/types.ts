@@ -37,7 +37,6 @@ export type WorkclawBindingPolicy = {
   dedupeWindowMs?: number;
   cooldownMs?: number;
   maxConcurrent?: number;
-  onNoMatch?: "drop" | "warn";
 };
 
 export type WorkclawBindingAction = {

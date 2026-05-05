@@ -47,8 +47,7 @@ export const WorkclawBindingPolicySchema = z
   .object({
     dedupeWindowMs: z.number().int().min(0).optional(),
     cooldownMs: z.number().int().min(0).optional(),
-    maxConcurrent: z.number().int().min(1).optional(),
-    onNoMatch: z.enum(["drop", "warn"]).optional()
+    maxConcurrent: z.number().int().min(1).optional()
   })
   .strict();
 

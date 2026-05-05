@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { resolveBinding } from "../src/bindings/resolve.js";
 import { renderBindingTemplate } from "../src/bindings/template.js";
 import { getBindingTier } from "../src/bindings/match.js";
+import { WorkclawBindingPolicySchema } from "../src/bindings/schema.js";
 
 const event = {
   id: "evt-1",
@@ -112,6 +113,13 @@ test("resolveBinding computes final action and outbound suppression", () => {
 
   assert.equal(resolved?.conversationKey, "gitlab:mr:42");
   assert.equal(resolved?.action.outbound.targetMode, "none");
+});
+
+test("WorkclawBindingPolicySchema rejects misplaced no-match policy", () => {
+  assert.throws(
+    () => WorkclawBindingPolicySchema.parse({ onNoMatch: "warn" }),
+    /Unrecognized key/
+  );
 });
 
 test("getBindingTier follows documented precedence", () => {
