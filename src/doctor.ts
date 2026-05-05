@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { loadConfig } from "./config/load.js";
 import { resolveProfilesConfig } from "./profiles/resolve.js";
 import { discoverWorkclawPacks } from "./packs/discovery.js";
-import { loadProfilePackGraph } from "./packs/loader.js";
+import { resolveEffectivePackGraph } from "./packs/graph.js";
 import { SqliteStorage } from "./storage/sqlite.js";
 import { readMcpConfigFile } from "./mcp/config.js";
 
@@ -92,10 +92,10 @@ export const runDoctorChecks = (): DoctorReport => {
       if (profile.workspaceDir.startsWith("/") && !profile.workspaceDir.includes(process.cwd())) {
         warnings.push(`Profile ${profile.id} uses non-portable absolute workspace path.`);
       }
-      const graph = loadProfilePackGraph(storage, discovered.filter((pack) => pack.allowed), profile.id, {
+      const graph = resolveEffectivePackGraph(discovered.filter((pack) => pack.allowed), profile.enabledPackIds, {
         strict: config.packs.strict
       });
-      effectiveGraphs.push({ profileId: profile.id, graph: graph.graph.map((pack) => pack.id) });
+      effectiveGraphs.push({ profileId: profile.id, graph: graph.map((pack) => pack.id) });
       profileRuntimeHealth.push({
         profileId: profile.id,
         status: profile.workspaceExists && profile.stateDirExists ? "ok" : "warning"

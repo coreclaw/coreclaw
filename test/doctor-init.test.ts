@@ -56,3 +56,33 @@ test("runDoctorChecks reports runtime sections for current instance", () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("runDoctorChecks resolves config-defined pack graphs without storage warmup", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-doctor-packs-"));
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(root);
+    runWorkclawInit(root);
+    const packRoot = path.join(root, "builtin-packs", "engineering-common");
+    fs.mkdirSync(packRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(packRoot, "workclaw.pack.json"),
+      JSON.stringify({ id: "engineering-common", type: "role-pack", description: "base" }),
+      "utf-8"
+    );
+    const configPath = path.join(root, "config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    config.profiles.list[0].packs = ["engineering-common"];
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+    const report = runDoctorChecks();
+    assert.deepEqual(report.profiles[0]?.enabledPackIds, ["engineering-common"]);
+    assert.deepEqual(report.packs.effectiveGraphs, [
+      { profileId: "main", graph: ["engineering-common"] }
+    ]);
+    assert.equal(report.storage.packInstalls, 0);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
