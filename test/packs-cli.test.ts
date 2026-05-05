@@ -118,3 +118,33 @@ test("pack info reports blocked discovered packs without graph errors", () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("pack enable rejects blocked packs before mutating profile config", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-pack-enable-blocked-"));
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(root);
+    runWorkclawInit(root);
+    const packRoot = path.join(root, "builtin-packs", "engineering-common");
+    fs.mkdirSync(packRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(packRoot, "workclaw.pack.json"),
+      JSON.stringify({ id: "engineering-common", type: "role-pack", description: "base" }),
+      "utf-8"
+    );
+    const configPath = path.join(root, "config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    config.packs.deny = ["engineering-common"];
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+    assert.throws(
+      () => runPackEnable("engineering-common", "main", root),
+      /Pack engineering-common is blocked: denied by packs\.deny/
+    );
+    const configAfterEnable = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    assert.equal(configAfterEnable.profiles.list[0].packs, undefined);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

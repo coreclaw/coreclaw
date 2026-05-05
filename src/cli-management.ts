@@ -91,6 +91,9 @@ export const runPackEnable = (packId: string, profileId: string, rootDir: string
   if (!pack) {
     throw new Error(`Unknown pack: ${packId}`);
   }
+  if (!pack.allowed) {
+    throw new Error(`Pack ${packId} is blocked: ${pack.blockedReason ?? "not allowed by pack policy"}`);
+  }
 
   const localConfig = readLocalConfigFile(rootDir);
   const profiles =
