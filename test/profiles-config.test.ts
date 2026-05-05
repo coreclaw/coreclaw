@@ -5,6 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { loadConfig } from "../src/config/load.js";
 import { resolveProfilesConfig } from "../src/profiles/resolve.js";
+import { ProfileRuntimeRegistry } from "../src/profiles/runtime.js";
 import { createConfig, createStorageFixture } from "./test-utils.js";
 
 test("loadConfig synthesizes implicit main profile for legacy single-runtime config", () => {
@@ -79,6 +80,43 @@ test("resolveProfilesConfig merges defaults and resolves absolute runtime paths"
     assert.deepEqual(profiles[0]?.surfaces.deny, ["slack"]);
   } finally {
     fixture.cleanup();
+  }
+});
+
+test("ProfileRuntimeRegistry resolves nested relative workspace roots from cwd", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-profile-runtime-root-"));
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(root);
+    const resolvedRoot = fs.realpathSync(root);
+    const config = createConfig("runtime/workspace", "runtime/data", {
+      profiles: {
+        defaults: {
+          workspaceRoot: "runtime/workspace/profiles",
+          stateRoot: "runtime/data/profiles",
+          llmProfile: "default",
+          toolProfile: "default"
+        },
+        list: [
+          {
+            id: "dev",
+            name: "Developer",
+            role: "dev"
+          }
+        ]
+      }
+    });
+
+    const registry = new ProfileRuntimeRegistry(config);
+    const profile = registry.getRequired("dev");
+    assert.equal(
+      profile.workspaceDir,
+      path.join(resolvedRoot, "runtime", "workspace", "profiles", "dev")
+    );
+    assert.equal(profile.stateDir, path.join(resolvedRoot, "runtime", "data", "profiles", "dev"));
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 

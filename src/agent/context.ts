@@ -175,9 +175,7 @@ export class ContextBuilder {
   ) {
     this.profileRegistry =
       profileRegistry ??
-      new ProfileRuntimeRegistry(config, {
-        instanceRoot: path.dirname(path.resolve(workspaceDir))
-      });
+      new ProfileRuntimeRegistry(config);
   }
 
   private resolveProfile(chat: ChatRecord): ResolvedWorkclawProfile {

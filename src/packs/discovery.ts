@@ -110,7 +110,10 @@ export const resolvePackDiscoveryRoots = (
   config: Pick<Config, "workspaceDir" | "packs">,
   options: { instanceRoot?: string } = {}
 ): string[] => {
-  const instanceRoot = path.resolve(options.instanceRoot ?? path.dirname(path.resolve(config.workspaceDir)));
+  const defaultInstanceRoot = path.isAbsolute(config.workspaceDir)
+    ? path.dirname(path.resolve(config.workspaceDir))
+    : process.cwd();
+  const instanceRoot = path.resolve(options.instanceRoot ?? defaultInstanceRoot);
   const configured = config.packs.enabledRoots;
   const roots =
     configured && configured.length > 0

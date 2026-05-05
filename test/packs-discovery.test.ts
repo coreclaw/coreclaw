@@ -66,6 +66,33 @@ test("discoverWorkclawPacks rejects manifest paths that escape the pack root", (
   }
 });
 
+test("discoverWorkclawPacks resolves nested relative roots from cwd", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-pack-runtime-root-"));
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(root);
+    writePack(path.join(root, "runtime", "packs", "engineering-common"), {
+      id: "engineering-common",
+      type: "role-pack",
+      description: "base"
+    });
+    const config = createConfig("runtime/workspace", "runtime/data", {
+      packs: {
+        enabledRoots: ["runtime/packs"]
+      }
+    });
+
+    const discovered = discoverWorkclawPacks(config);
+    assert.deepEqual(
+      discovered.map((pack) => pack.id),
+      ["engineering-common"]
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("resolveEffectivePackGraph preserves root order and resolves extends before local packs", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-pack-graph-"));
   try {

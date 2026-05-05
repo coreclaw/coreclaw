@@ -11,9 +11,10 @@ export class ProfileRuntimeRegistry {
     config: Pick<Config, "workspaceDir" | "dataDir" | "profiles" | "llm" | "toolProfiles" | "teams">,
     options: { instanceRoot?: string } = {}
   ) {
-    const instanceRoot = path.resolve(
-      options.instanceRoot ?? path.dirname(path.resolve(config.workspaceDir))
-    );
+    const defaultInstanceRoot = path.isAbsolute(config.workspaceDir)
+      ? path.dirname(path.resolve(config.workspaceDir))
+      : process.cwd();
+    const instanceRoot = path.resolve(options.instanceRoot ?? defaultInstanceRoot);
     const profiles = resolveProfilesConfig(config, { instanceRoot });
     this.profilesById = new Map(profiles.map((profile) => [profile.id, profile]));
   }
