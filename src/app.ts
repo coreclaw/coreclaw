@@ -35,7 +35,7 @@ import type {
 import { discoverWorkclawPacks } from "./packs/discovery.js";
 import { loadProfilePackGraph, buildEffectiveMcpConfig } from "./packs/loader.js";
 import { recordDiscoveredPackInstall, enablePackForProfile } from "./packs/install.js";
-import { mergeToolPolicies } from "./tools/policy-merge.js";
+import { resolveRuntimeToolPolicy } from "./packs/policy.js";
 
 const ensureDir = (dir: string) => {
   fs.mkdirSync(dir, { recursive: true });
@@ -287,16 +287,17 @@ export const createCoreclawApp = async (
 
   const resolveToolPolicyForProfile = (profileId = "main"): ToolContext["toolPolicy"] => {
     const profile = profileRegistry.get(profileId);
-    const configuredProfilePolicy = profile?.toolProfile
-      ? config.toolProfiles[profile.toolProfile]
-      : undefined;
     const packState = loadProfilePackGraph(
       storage,
       discoveredPacks.filter((pack) => pack.allowed),
       profileId,
       { strict: config.packs.strict }
     );
-    return mergeToolPolicies(configuredProfilePolicy, profile?.toolPolicy, packState.toolPolicy);
+    return resolveRuntimeToolPolicy({
+      config,
+      profile,
+      packToolPolicy: packState.toolPolicy
+    });
   };
 
   const listPackMcpFragments = () => {

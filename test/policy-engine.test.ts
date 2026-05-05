@@ -71,6 +71,38 @@ test("policy engine allows shell.exec for admin", async () => {
   }
 });
 
+test("policy engine blocks elevated tools when profile policy disables them", async () => {
+  const fixture = createStorageFixture({
+    allowShell: true,
+    allowedShellCommands: ["echo"]
+  });
+  try {
+    const chat = fixture.storage.upsertChat({ channel: "cli", chatId: "local" });
+    fixture.storage.setChatRole(chat.id, "admin");
+    const registry = new ToolRegistry(new DefaultToolPolicyEngine());
+    for (const tool of shellTools()) {
+      registry.register(tool);
+    }
+    const { context } = createToolContext({
+      config: fixture.config,
+      storage: fixture.storage,
+      workspaceDir: fixture.workspaceDir,
+      chatFk: chat.id,
+      chatRole: "admin",
+      toolPolicy: {
+        elevated: { enabled: false }
+      }
+    });
+
+    await assert.rejects(
+      registry.execute("shell.exec", { command: "echo hello" }, context),
+      /requires elevated tool policy/
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("policy engine blocks non-admin fs.write on protected workspace paths", async () => {
   const fixture = createStorageFixture();
   try {

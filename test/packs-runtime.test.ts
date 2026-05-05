@@ -7,7 +7,9 @@ import { SkillLoader } from "../src/skills/loader.js";
 import { createCoreclawApp } from "../src/app.js";
 import { buildEffectiveMcpConfig, loadProfilePackGraph } from "../src/packs/loader.js";
 import { enablePackForProfile, recordDiscoveredPackInstall } from "../src/packs/install.js";
-import { createStorageFixture } from "./test-utils.js";
+import { resolveRuntimeToolPolicy } from "../src/packs/policy.js";
+import { resolveProfilesConfig } from "../src/profiles/resolve.js";
+import { createConfig, createStorageFixture } from "./test-utils.js";
 
 const logger = {
   fatal: () => undefined,
@@ -121,5 +123,39 @@ test("createCoreclawApp removes stale pack enablements that are no longer in con
     }
   } finally {
     fixture.cleanup();
+  }
+});
+
+test("runtime tool policy applies pack referenced tool profile and elevated gate", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-pack-policy-"));
+  try {
+    const config = createConfig(path.join(root, "workspace"), path.join(root, "data"), {
+      toolProfiles: {
+        default: {
+          allow: ["fs.*"],
+          deny: []
+        },
+        packSafe: {
+          allow: ["fs.read"],
+          deny: ["shell.exec"]
+        }
+      }
+    });
+    const profile = resolveProfilesConfig(config, { instanceRoot: root })[0]!;
+    const policy = resolveRuntimeToolPolicy({
+      config,
+      profile,
+      packToolPolicy: {
+        profile: "packSafe",
+        elevated: { enabled: false }
+      }
+    });
+
+    assert.deepEqual(policy.allow, ["fs.read"]);
+    assert.deepEqual(policy.allowGroups, [["fs.*"], ["fs.read"]]);
+    assert.deepEqual(policy.deny, ["shell.exec"]);
+    assert.deepEqual(policy.elevated, { enabled: false });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });

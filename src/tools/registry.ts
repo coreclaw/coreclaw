@@ -54,9 +54,13 @@ export type ToolContext = {
   bus: MessageBus;
   config: Config;
   toolPolicy?: {
+    profile?: string;
     allow?: string[];
     deny?: string[];
     allowGroups?: string[][];
+    elevated?: {
+      enabled?: boolean;
+    };
   };
   skills: SkillIndexEntry[];
   isolatedRuntime?: IsolatedToolRuntime;

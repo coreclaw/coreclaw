@@ -15,3 +15,13 @@ test("mergeToolPolicies keeps disjoint allow layers restrictive", () => {
   assert.deepEqual(merged.allow, []);
   assert.deepEqual(merged.allowGroups, [["fs.*"], ["memory.*"]]);
 });
+
+test("mergeToolPolicies preserves pack profile and disables elevated tools when any layer does", () => {
+  const merged = mergeToolPolicies(
+    { profile: "base-tools", elevated: { enabled: true } },
+    { profile: "pack-tools", elevated: { enabled: false } }
+  );
+
+  assert.equal(merged.profile, "pack-tools");
+  assert.deepEqual(merged.elevated, { enabled: false });
+});

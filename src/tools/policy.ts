@@ -42,6 +42,14 @@ const NON_ADMIN_PROTECTED_WRITE_PREFIXES = [
   "skills/"
 ];
 
+const ELEVATED_TOOL_PATTERNS = [
+  "shell.exec",
+  "mcp.reload",
+  "bus.dead_letter.*",
+  "heartbeat.*",
+  "chat.set_role"
+];
+
 const toWorkspaceRelativePath = (
   workspaceDir: string,
   targetPath: string
@@ -146,6 +154,13 @@ export class DefaultToolPolicyEngine implements ToolPolicyEngine {
       if (task.chatFk !== ctx.chat.id) {
         return deny("Only admin can update tasks from other chats.");
       }
+    }
+
+    if (
+      ctx.toolPolicy?.elevated?.enabled === false &&
+      matchesAnyToolPattern(toolName, ELEVATED_TOOL_PATTERNS)
+    ) {
+      return deny(`Tool '${toolName}' requires elevated tool policy.`);
     }
 
     if (toolName === "web.fetch") {

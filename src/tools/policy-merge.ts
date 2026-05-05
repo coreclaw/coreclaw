@@ -1,7 +1,11 @@
 export type MergeableToolPolicy = {
+  profile?: string;
   allow?: string[];
   deny?: string[];
   allowGroups?: string[][];
+  elevated?: {
+    enabled?: boolean;
+  };
 };
 
 const dedupePatterns = (values: string[] | undefined): string[] => {
@@ -81,8 +85,16 @@ export const mergeToolPolicies = (
 ): MergeableToolPolicy => {
   const allowGroups: string[][] = [];
   const deny = new Set<string>();
+  let profile: string | undefined;
+  let elevatedEnabled: boolean | undefined;
 
   for (const policy of policies) {
+    if (policy?.profile) {
+      profile = policy.profile;
+    }
+    if (policy?.elevated?.enabled !== undefined) {
+      elevatedEnabled = elevatedEnabled === false ? false : policy.elevated.enabled;
+    }
     allowGroups.push(...getToolPolicyAllowGroups(policy));
     for (const entry of policy?.deny ?? []) {
       if (entry) {
@@ -93,10 +105,12 @@ export const mergeToolPolicies = (
 
   const allow = summarizeAllowGroups(allowGroups);
   return {
+    ...(profile ? { profile } : {}),
     ...(allow ? { allow } : {}),
     ...(allowGroups.length > 1 || allowGroups.some((group) => group.length === 0)
       ? { allowGroups }
       : {}),
-    ...(deny.size > 0 ? { deny: [...deny] } : {})
+    ...(deny.size > 0 ? { deny: [...deny] } : {}),
+    ...(elevatedEnabled !== undefined ? { elevated: { enabled: elevatedEnabled } } : {})
   };
 };
