@@ -148,3 +148,102 @@ test("pack enable rejects blocked packs before mutating profile config", () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("pack enable rejects packs with blocked dependencies before mutating profile config", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-pack-enable-blocked-dep-"));
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(root);
+    runWorkclawInit(root);
+    const baseRoot = path.join(root, "builtin-packs", "base-pack");
+    const childRoot = path.join(root, "builtin-packs", "child-pack");
+    fs.mkdirSync(baseRoot, { recursive: true });
+    fs.mkdirSync(childRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(baseRoot, "workclaw.pack.json"),
+      JSON.stringify({ id: "base-pack", type: "role-pack", description: "base" }),
+      "utf-8"
+    );
+    fs.writeFileSync(
+      path.join(childRoot, "workclaw.pack.json"),
+      JSON.stringify({
+        id: "child-pack",
+        type: "role-pack",
+        description: "child",
+        extends: ["base-pack"]
+      }),
+      "utf-8"
+    );
+    const configPath = path.join(root, "config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    config.packs.deny = ["base-pack"];
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+    assert.throws(
+      () => runPackEnable("child-pack", "main", root),
+      /Pack child-pack cannot be enabled: Unknown pack in graph: base-pack/
+    );
+    const configAfterEnable = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    assert.equal(configAfterEnable.profiles.list[0].packs, undefined);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("pack disable rejects inherited default packs before mutating profile config", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-pack-disable-inherited-"));
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(root);
+    runWorkclawInit(root);
+    const configPath = path.join(root, "config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    config.profiles.defaults.packs = ["engineering-common"];
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+    assert.throws(
+      () => runPackDisable("engineering-common", "main", root),
+      /Pack engineering-common is inherited by profile main/
+    );
+    const configAfterDisable = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    assert.deepEqual(configAfterDisable.profiles.defaults.packs, ["engineering-common"]);
+    assert.equal(configAfterDisable.profiles.list[0].packs, undefined);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("pack disable rejects inherited team packs before mutating profile config", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-pack-disable-team-"));
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(root);
+    runWorkclawInit(root);
+    const configPath = path.join(root, "config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    config.teams = {
+      list: [
+        {
+          id: "platform",
+          name: "Platform",
+          profiles: ["main"],
+          packs: ["team-shared"]
+        }
+      ]
+    };
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+    assert.throws(
+      () => runPackDisable("team-shared", "main", root),
+      /Pack team-shared is inherited by profile main/
+    );
+    const configAfterDisable = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    assert.deepEqual(configAfterDisable.teams.list[0].packs, ["team-shared"]);
+    assert.equal(configAfterDisable.profiles.list[0].packs, undefined);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -74,6 +74,48 @@ const withLocalStorage = <T>(action: (storage: SqliteStorage) => T): T => {
   }
 };
 
+type LocalProfilesConfig = {
+  defaults?: Record<string, unknown>;
+  list?: Array<Record<string, unknown>>;
+};
+
+const getLocalProfilesConfig = (localConfig: Record<string, unknown>): LocalProfilesConfig =>
+  localConfig.profiles && typeof localConfig.profiles === "object"
+    ? (localConfig.profiles as LocalProfilesConfig)
+    : { defaults: {}, list: [] };
+
+const ensureAllowedPackGraph = (
+  packId: string,
+  discovered: ReturnType<typeof discoverWorkclawPacks>,
+  strict: boolean
+) => {
+  try {
+    resolveEffectivePackGraph(discovered.filter((entry) => entry.allowed), [packId], { strict });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Pack ${packId} cannot be enabled: ${detail}`);
+  }
+};
+
+const profileStillEnablesPackAfterDirectUpdate = (
+  config: ReturnType<typeof loadConfig>,
+  profileId: string,
+  packId: string,
+  packs: string[]
+): boolean => {
+  const list = (config.profiles.list ?? []).map((profile) =>
+    profile.id === profileId ? { ...profile, packs } : profile
+  );
+  const simulated = resolveProfilesConfig({
+    ...config,
+    profiles: {
+      ...config.profiles,
+      list
+    }
+  }).find((profile) => profile.id === profileId);
+  return simulated?.enabledPackIds.includes(packId) ?? false;
+};
+
 export const runPackInstall = (packId: string) => {
   const config = loadConfig();
   const discovered = discoverWorkclawPacks(config);
@@ -94,15 +136,10 @@ export const runPackEnable = (packId: string, profileId: string, rootDir: string
   if (!pack.allowed) {
     throw new Error(`Pack ${packId} is blocked: ${pack.blockedReason ?? "not allowed by pack policy"}`);
   }
+  ensureAllowedPackGraph(packId, discovered, config.packs.strict);
 
   const localConfig = readLocalConfigFile(rootDir);
-  const profiles =
-    localConfig.profiles && typeof localConfig.profiles === "object"
-      ? (localConfig.profiles as {
-          defaults?: Record<string, unknown>;
-          list?: Array<Record<string, unknown>>;
-        })
-      : { defaults: {}, list: [] };
+  const profiles = getLocalProfilesConfig(localConfig);
   const list = profiles.list ?? [];
   const profile = list.find((entry) => entry.id === profileId);
   if (!profile) {
@@ -132,22 +169,26 @@ export const runPackEnable = (packId: string, profileId: string, rootDir: string
 };
 
 export const runPackDisable = (packId: string, profileId: string, rootDir: string = process.cwd()) => {
+  const config = loadConfig();
   const localConfig = readLocalConfigFile(rootDir);
-  const profiles =
-    localConfig.profiles && typeof localConfig.profiles === "object"
-      ? (localConfig.profiles as {
-          defaults?: Record<string, unknown>;
-          list?: Array<Record<string, unknown>>;
-        })
-      : { defaults: {}, list: [] };
+  const profiles = getLocalProfilesConfig(localConfig);
   const list = profiles.list ?? [];
   const profile = list.find((entry) => entry.id === profileId);
   if (!profile) {
     throw new Error(`Unknown profile: ${profileId}`);
   }
-  profile.packs = (Array.isArray(profile.packs) ? (profile.packs as string[]) : []).filter(
-    (entry) => entry !== packId
-  );
+  const currentPacks = Array.isArray(profile.packs) ? (profile.packs as string[]) : [];
+  const nextPacks = currentPacks.filter((entry) => entry !== packId);
+  const effectiveProfile = resolveProfilesConfig(config).find((entry) => entry.id === profileId);
+  if (
+    effectiveProfile?.enabledPackIds.includes(packId) &&
+    profileStillEnablesPackAfterDirectUpdate(config, profileId, packId, nextPacks)
+  ) {
+    throw new Error(
+      `Pack ${packId} is inherited by profile ${profileId}; remove it from profiles.defaults.packs or team pack configuration instead.`
+    );
+  }
+  profile.packs = nextPacks;
   const configPath = writeLocalConfigFile(rootDir, {
     ...localConfig,
     profiles: {
