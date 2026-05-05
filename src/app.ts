@@ -17,6 +17,7 @@ import { DefaultToolPolicyEngine } from "./tools/policy.js";
 import { builtInTools } from "./tools/builtins/index.js";
 import { McpManager } from "./mcp/manager.js";
 import { readMcpConfigFile } from "./mcp/config.js";
+import { parseMcpToolFullName } from "./mcp/allowlist.js";
 import { SkillLoader } from "./skills/loader.js";
 import { ProfileRuntimeRegistry } from "./profiles/runtime.js";
 import { resolveTeamOverlays } from "./teams/overlay.js";
@@ -33,7 +34,11 @@ import type {
   McpReloadResult
 } from "./tools/registry.js";
 import { discoverWorkclawPacks } from "./packs/discovery.js";
-import { loadProfilePackGraph, buildEffectiveMcpConfig } from "./packs/loader.js";
+import {
+  loadProfilePackGraph,
+  buildEffectiveMcpConfig,
+  buildMcpServerProfileScopes
+} from "./packs/loader.js";
 import { recordDiscoveredPackInstall, enablePackForProfile } from "./packs/install.js";
 import { resolveRuntimeToolPolicy } from "./packs/policy.js";
 
@@ -263,6 +268,7 @@ export const createCoreclawApp = async (
   const baseMcpConfigPath = path.resolve(config.mcpConfigPath);
   const effectiveMcpConfigPath = path.resolve(config.dataDir, "workclaw.mcp.runtime.json");
   let mcpConfigSignature: string | null = null;
+  let mcpServerProfileScopes = new Map<string, Set<string>>();
   let mcpSyncInFlight: Promise<McpReloadResult> | null = null;
   let mcpFailureStreak = 0;
   let mcpLastFailedSignature: string | null = null;
@@ -300,17 +306,22 @@ export const createCoreclawApp = async (
     });
   };
 
-  const listPackMcpFragments = () => {
-    const fragments = new Set<string>();
-    for (const profile of profileRegistry.list()) {
-      const graph = loadProfilePackGraph(
+  const loadProfileMcpGraphs = () =>
+    profileRegistry.list().map((profile) => ({
+      profileId: profile.id,
+      ...loadProfilePackGraph(
         storage,
         discoveredPacks.filter((pack) => pack.allowed),
         profile.id,
         {
           strict: config.packs.strict
         }
-      );
+      )
+    }));
+
+  const listPackMcpFragments = () => {
+    const fragments = new Set<string>();
+    for (const graph of loadProfileMcpGraphs()) {
       for (const fragment of graph.mcpFragments) {
         fragments.add(fragment);
       }
@@ -319,12 +330,10 @@ export const createCoreclawApp = async (
   };
 
   const materializeEffectiveMcpConfig = () => {
-    const graphs = profileRegistry.list().map((profile) =>
-      loadProfilePackGraph(storage, discoveredPacks.filter((pack) => pack.allowed), profile.id, {
-        strict: config.packs.strict
-      })
-    );
-    const merged = buildEffectiveMcpConfig(readMcpConfigFile(baseMcpConfigPath), graphs);
+    const baseMcpConfig = readMcpConfigFile(baseMcpConfigPath);
+    const graphs = loadProfileMcpGraphs();
+    mcpServerProfileScopes = buildMcpServerProfileScopes(baseMcpConfig, graphs);
+    const merged = buildEffectiveMcpConfig(baseMcpConfig, graphs);
     fs.writeFileSync(effectiveMcpConfigPath, JSON.stringify(merged, null, 2), "utf-8");
     return effectiveMcpConfigPath;
   };
@@ -475,7 +484,7 @@ export const createCoreclawApp = async (
 
     mcpSyncInFlight = (async () => {
       try {
-          const defs = await mcpManager.reloadFromConfig(materializeEffectiveMcpConfig());
+        const defs = await mcpManager.reloadFromConfig(materializeEffectiveMcpConfig());
         toolRegistry.replaceRawByPrefix(
           "mcp__",
           defs,
@@ -486,6 +495,13 @@ export const createCoreclawApp = async (
               "MCP tool call timed out after " + mcpToolCallTimeoutMs + "ms"
             );
             return formatMcpResult(result);
+          },
+          {
+            getScope: (def) => {
+              const parsed = parseMcpToolFullName(def.name);
+              const profiles = parsed ? mcpServerProfileScopes.get(parsed.server) : undefined;
+              return profiles ? { profiles: [...profiles] } : undefined;
+            }
           }
         );
 

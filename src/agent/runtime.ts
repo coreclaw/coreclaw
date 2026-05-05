@@ -196,7 +196,7 @@ export class AgentRuntime {
     const toolMessages: ToolMessage[] = [];
 
     for (let i = 0; i < this.config.maxToolIterations; i += 1) {
-      const toolDefs = this.tools.listDefinitions();
+      const toolDefs = this.tools.listDefinitions(params.toolContext);
       const toolsForRequest = toolDefs.length > 0 ? toolDefs : undefined;
       const response = await withTimeout(
         this.provider.chat({

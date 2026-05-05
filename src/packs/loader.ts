@@ -74,3 +74,33 @@ export const buildEffectiveMcpConfig = (
 
   return merged;
 };
+
+export const buildMcpServerProfileScopes = (
+  baseConfig: McpConfigFile | null,
+  graphs: Array<{ profileId?: string; mcpFragments: string[] }>
+): Map<string, Set<string>> => {
+  const baseServers = new Set(Object.keys(baseConfig?.servers ?? {}));
+  const scopes = new Map<string, Set<string>>();
+
+  for (const graph of graphs) {
+    if (!graph.profileId) {
+      continue;
+    }
+    for (const fragmentPath of graph.mcpFragments) {
+      if (!fs.existsSync(fragmentPath)) {
+        continue;
+      }
+      const parsed = readMcpFragment(fragmentPath);
+      for (const server of Object.keys(parsed.servers)) {
+        if (baseServers.has(server)) {
+          continue;
+        }
+        const profiles = scopes.get(server) ?? new Set<string>();
+        profiles.add(graph.profileId);
+        scopes.set(server, profiles);
+      }
+    }
+  }
+
+  return scopes;
+};

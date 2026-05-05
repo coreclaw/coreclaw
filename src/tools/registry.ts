@@ -86,6 +86,10 @@ export type McpReloadResult = {
   retryAt?: string;
 };
 
+export type ToolVisibilityScope = {
+  profiles?: string[];
+};
+
 export interface ToolSpec<TArgs extends z.ZodType = z.ZodType> {
   name: string;
   description: string;
@@ -96,6 +100,7 @@ export interface ToolSpec<TArgs extends z.ZodType = z.ZodType> {
 export class ToolRegistry {
   private tools = new Map<string, ToolSpec<any>>();
   private toolDefs: ToolDefinition[] = [];
+  private toolScopes = new Map<string, ToolVisibilityScope>();
 
   constructor(
     private policyEngine?: ToolPolicyEngine,
@@ -104,6 +109,7 @@ export class ToolRegistry {
 
   register<TArgs extends z.ZodType>(tool: ToolSpec<TArgs>) {
     this.tools.set(tool.name, tool as unknown as ToolSpec<any>);
+    this.toolScopes.delete(tool.name);
     const jsonSchema = z.toJSONSchema(tool.schema) as Record<string, unknown>;
     this.upsertDefinition({
       name: tool.name,
@@ -112,7 +118,11 @@ export class ToolRegistry {
     });
   }
 
-  registerRaw(def: ToolDefinition, handler: (args: unknown, ctx: ToolContext) => Promise<string>) {
+  registerRaw(
+    def: ToolDefinition,
+    handler: (args: unknown, ctx: ToolContext) => Promise<string>,
+    scope?: ToolVisibilityScope
+  ) {
     const schema = z.any();
     const spec: ToolSpec<any> = {
       name: def.name,
@@ -121,6 +131,7 @@ export class ToolRegistry {
       run: async (args, ctx) => handler(args, ctx)
     };
     this.tools.set(def.name, spec);
+    this.setToolScope(def.name, scope);
     this.upsertDefinition(def);
   }
 
@@ -128,6 +139,7 @@ export class ToolRegistry {
     for (const name of [...this.tools.keys()]) {
       if (name.startsWith(prefix)) {
         this.tools.delete(name);
+        this.toolScopes.delete(name);
       }
     }
     this.toolDefs = this.toolDefs.filter((def) => !def.name.startsWith(prefix));
@@ -136,7 +148,10 @@ export class ToolRegistry {
   replaceRawByPrefix(
     prefix: string,
     defs: ToolDefinition[],
-    handler: (def: ToolDefinition) => (args: unknown, ctx: ToolContext) => Promise<string>
+    handler: (def: ToolDefinition) => (args: unknown, ctx: ToolContext) => Promise<string>,
+    options: {
+      getScope?: (def: ToolDefinition) => ToolVisibilityScope | undefined;
+    } = {}
   ) {
     const nextTools = new Map(this.tools);
     for (const name of [...nextTools.keys()]) {
@@ -151,6 +166,9 @@ export class ToolRegistry {
         nextDefMap.set(def.name, def);
       }
     }
+    const nextScopes = new Map(
+      [...this.toolScopes.entries()].filter(([name]) => !name.startsWith(prefix))
+    );
 
     for (const def of defs) {
       const spec: ToolSpec<any> = {
@@ -161,14 +179,19 @@ export class ToolRegistry {
       };
       nextTools.set(def.name, spec);
       nextDefMap.set(def.name, def);
+      const scope = this.normalizeToolScope(options.getScope?.(def));
+      if (scope) {
+        nextScopes.set(def.name, scope);
+      }
     }
 
     this.tools = nextTools;
     this.toolDefs = [...nextDefMap.values()];
+    this.toolScopes = nextScopes;
   }
 
-  listDefinitions(): ToolDefinition[] {
-    return [...this.toolDefs];
+  listDefinitions(ctx?: ToolContext): ToolDefinition[] {
+    return this.toolDefs.filter((def) => this.isToolVisible(def.name, ctx));
   }
 
   async execute(name: string, args: unknown, ctx: ToolContext): Promise<string> {
@@ -206,6 +229,15 @@ export class ToolRegistry {
         reason: "tool_not_found"
       });
       throw new Error(`Tool not found: ${name}`);
+    }
+    if (!this.isToolVisible(name, ctx)) {
+      const reason = `Tool is not available for profile: ${ctx.chat.profileId}`;
+      this.telemetry?.recordToolExecution(name, Date.now() - startedAt, false);
+      writeAudit({
+        outcome: "denied",
+        reason
+      });
+      throw new Error(reason);
     }
     const parsed = tool.schema.safeParse(args);
     if (!parsed.success) {
@@ -261,5 +293,27 @@ export class ToolRegistry {
   private upsertDefinition(def: ToolDefinition) {
     this.toolDefs = this.toolDefs.filter((entry) => entry.name !== def.name);
     this.toolDefs.push(def);
+  }
+
+  private setToolScope(name: string, scope?: ToolVisibilityScope) {
+    const normalized = this.normalizeToolScope(scope);
+    if (!normalized) {
+      this.toolScopes.delete(name);
+      return;
+    }
+    this.toolScopes.set(name, normalized);
+  }
+
+  private normalizeToolScope(scope?: ToolVisibilityScope): ToolVisibilityScope | undefined {
+    const profiles = [...new Set((scope?.profiles ?? []).map((entry) => entry.trim()).filter(Boolean))];
+    return profiles.length > 0 ? { profiles } : undefined;
+  }
+
+  private isToolVisible(name: string, ctx?: ToolContext): boolean {
+    const profiles = this.toolScopes.get(name)?.profiles;
+    if (!profiles || profiles.length === 0 || !ctx) {
+      return true;
+    }
+    return profiles.includes(ctx.chat.profileId);
   }
 }

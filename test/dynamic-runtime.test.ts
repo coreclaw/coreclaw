@@ -132,6 +132,55 @@ test("AgentRuntime refreshes tool definitions between tool iterations", async ()
   }
 });
 
+test("ToolRegistry hides scoped MCP definitions outside the active profile", async () => {
+  const fixture = createStorageFixture();
+  try {
+    const registry = new ToolRegistry();
+    registry.replaceRawByPrefix(
+      "mcp__",
+      [
+        {
+          name: "mcp__devtools__echo",
+          description: "echo",
+          parameters: { type: "object", properties: {} }
+        }
+      ],
+      () => async () => "echo-ok",
+      {
+        getScope: () => ({ profiles: ["dev"] })
+      }
+    );
+
+    const devContext = createToolContext({
+      config: fixture.config,
+      storage: fixture.storage,
+      workspaceDir: fixture.workspaceDir,
+      profileId: "dev",
+      chatRole: "admin"
+    }).context;
+    const qaContext = createToolContext({
+      config: fixture.config,
+      storage: fixture.storage,
+      workspaceDir: fixture.workspaceDir,
+      profileId: "qa",
+      chatRole: "admin"
+    }).context;
+
+    assert.deepEqual(
+      registry.listDefinitions(devContext).map((tool) => tool.name),
+      ["mcp__devtools__echo"]
+    );
+    assert.deepEqual(registry.listDefinitions(qaContext), []);
+    assert.equal(await registry.execute("mcp__devtools__echo", {}, devContext), "echo-ok");
+    await assert.rejects(
+      registry.execute("mcp__devtools__echo", {}, qaContext),
+      /not available for profile: qa/
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("ConversationRouter auto-syncs MCP tools before each inbound", async () => {
   const fixture = createStorageFixture({
     bus: {

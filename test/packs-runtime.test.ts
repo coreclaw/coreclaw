@@ -5,7 +5,11 @@ import os from "node:os";
 import path from "node:path";
 import { SkillLoader } from "../src/skills/loader.js";
 import { createCoreclawApp } from "../src/app.js";
-import { buildEffectiveMcpConfig, loadProfilePackGraph } from "../src/packs/loader.js";
+import {
+  buildEffectiveMcpConfig,
+  buildMcpServerProfileScopes,
+  loadProfilePackGraph
+} from "../src/packs/loader.js";
 import { enablePackForProfile, recordDiscoveredPackInstall } from "../src/packs/install.js";
 import { resolveRuntimeToolPolicy } from "../src/packs/policy.js";
 import { resolveProfilesConfig } from "../src/profiles/resolve.js";
@@ -91,6 +95,58 @@ test("pack MCP fragments merge into effective runtime MCP config", () => {
     );
 
     assert.deepEqual(Object.keys(merged.servers).sort(), ["base", "gitlab"]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("pack MCP server scopes are derived from profile graphs", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-pack-mcp-scope-"));
+  try {
+    const devFragment = path.join(root, "dev.json");
+    const qaFragment = path.join(root, "qa.json");
+    fs.writeFileSync(
+      devFragment,
+      JSON.stringify({
+        servers: {
+          devtools: { command: "node", args: ["dev.js"] },
+          shared: { command: "node", args: ["shared-dev.js"] },
+          base: { command: "node", args: ["base-pack.js"] }
+        }
+      }),
+      "utf-8"
+    );
+    fs.writeFileSync(
+      qaFragment,
+      JSON.stringify({
+        servers: {
+          qatools: { command: "node", args: ["qa.js"] },
+          shared: { command: "node", args: ["shared-qa.js"] }
+        }
+      }),
+      "utf-8"
+    );
+
+    const scopes = buildMcpServerProfileScopes(
+      {
+        servers: {
+          base: { command: "node", args: ["base.js"] }
+        }
+      },
+      [
+        { profileId: "dev", mcpFragments: [devFragment] },
+        { profileId: "qa", mcpFragments: [qaFragment] }
+      ]
+    );
+    const normalized = Object.fromEntries(
+      [...scopes.entries()].map(([server, profiles]) => [server, [...profiles].sort()])
+    );
+
+    assert.deepEqual(normalized, {
+      devtools: ["dev"],
+      qatools: ["qa"],
+      shared: ["dev", "qa"]
+    });
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
