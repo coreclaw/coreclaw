@@ -495,14 +495,14 @@ export class ConversationRouter {
         this.bus.publishOutbound(outbound);
       }
     } else {
-      const shouldSendImmediateReply =
-        !binding ||
-        (binding.action.outbound.targetMode !== "none" &&
-          (binding.action.outbound.targetMode === "reply-to-event" ||
-            (binding.action.outbound.targetMode === "explicit-target" &&
-              (binding.action.outbound.surface ?? event.surface) === message.channel)));
-      if (shouldSendImmediateReply && effectiveReplyMode === "normal") {
-        this.bus.publishOutbound(outbound);
+      const immediateTarget = this.resolveImmediateOutboundTarget(message, event, binding);
+      if (immediateTarget && effectiveReplyMode === "normal") {
+        this.bus.publishOutbound({
+          ...outbound,
+          id: `outbound:${immediateTarget.channel}:${immediateTarget.chatId}:${message.id}`,
+          channel: immediateTarget.channel,
+          chatId: immediateTarget.chatId
+        });
       }
       if (shouldWakeHeartbeatAfterRun(runMode)) {
         this.wakeHeartbeat?.("router:message-processed");
@@ -528,6 +528,37 @@ export class ConversationRouter {
     const profileId = binding?.profileId ?? this.resolveConversationProfileId(message);
     const chatId = binding?.conversationKey ?? message.chatId;
     return `${profileId}:${message.channel}:${chatId}`;
+  }
+
+  private resolveImmediateOutboundTarget(
+    message: InboundMessage,
+    event: WorkclawEvent,
+    binding: RoutedWorkclawEvent | null
+  ): { channel: string; chatId: string } | null {
+    if (!binding) {
+      return { channel: message.channel, chatId: message.chatId };
+    }
+    const outbound = binding.action.outbound;
+    if (outbound.targetMode === "none") {
+      return null;
+    }
+    if (outbound.targetMode === "reply-to-event") {
+      return { channel: message.channel, chatId: message.chatId };
+    }
+
+    const channel = outbound.surface ?? event.surface;
+    if (channel !== message.channel) {
+      return null;
+    }
+    return {
+      channel,
+      chatId:
+        outbound.threadKey ??
+        outbound.channelKey ??
+        outbound.sourceKey ??
+        binding.action.threadKey ??
+        message.chatId
+    };
   }
 
   private resolveConversationProfileId(message: InboundMessage): string {

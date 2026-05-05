@@ -251,6 +251,116 @@ test("ConversationRouter keeps immediate CLI replies while also recording outbou
   }
 });
 
+test("ConversationRouter sends same-surface explicit-target replies to resolved target chat", async () => {
+  const fixture = createStorageFixture({
+    bindings: [
+      {
+        id: "binding.cli.explicit.qa",
+        profileId: "qa",
+        match: {
+          surface: "cli",
+          event: "message.received"
+        },
+        action: {
+          outbound: {
+            targetMode: "explicit-target",
+            surface: "cli",
+            threadKeyTemplate: "target:${payload.room}"
+          }
+        }
+      }
+    ],
+    profiles: {
+      defaults: {
+        workspaceRoot: "profiles",
+        stateRoot: "state",
+        llmProfile: "default",
+        toolProfile: "default"
+      },
+      list: [
+        {
+          id: "qa",
+          name: "QA",
+          role: "qa"
+        }
+      ]
+    },
+    bus: {
+      pollMs: 10,
+      batchSize: 20,
+      maxAttempts: 3,
+      retryBackoffMs: 10,
+      maxRetryBackoffMs: 100,
+      processingTimeoutMs: 500,
+      maxPendingInbound: 5_000,
+      maxPendingOutbound: 5_000,
+      overloadPendingThreshold: 2_000,
+      overloadBackoffMs: 500,
+      perChatRateLimitWindowMs: 60_000,
+      perChatRateLimitMax: 120
+    }
+  });
+  const provider = new MockProvider(async () => ({ content: "qa explicit reply" }));
+  fs.mkdirSync(path.join(fixture.rootDir, "profiles", "qa", "memory"), { recursive: true });
+  const runtime = new AgentRuntime(provider, new ToolRegistry(), fixture.config, logger);
+  const mcp = new McpManager({ logger });
+  const isolatedRuntime = new IsolatedToolRuntime(fixture.config, logger);
+  const contextBuilder = new ContextBuilder(fixture.storage, fixture.config, fixture.workspaceDir);
+  const bus = new MessageBus(fixture.storage, fixture.config, logger);
+  const router = new ConversationRouter(
+    fixture.storage,
+    contextBuilder,
+    runtime,
+    mcp,
+    bus,
+    logger,
+    fixture.config,
+    [],
+    isolatedRuntime
+  );
+  bus.onInbound(router.handleInbound);
+  const outboundMessages: Array<{ channel: string; chatId: string; content: string }> = [];
+  bus.onOutbound(async (message) => {
+    outboundMessages.push({
+      channel: message.channel,
+      chatId: message.chatId,
+      content: message.content
+    });
+  });
+
+  try {
+    bus.start();
+    bus.publishInbound({
+      id: "evt-cli-explicit-1",
+      channel: "cli",
+      chatId: "local",
+      senderId: "user",
+      content: "hello",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        surface: "cli",
+        payload: {
+          room: "qa"
+        }
+      }
+    });
+
+    await waitUntil(() => outboundMessages.length >= 1);
+    assert.deepEqual(outboundMessages[0], {
+      channel: "cli",
+      chatId: "target:qa",
+      content: "qa explicit reply"
+    });
+    const outboundAction = fixture.storage.listOutboundActions({ profileId: "qa" })[0];
+    assert.equal(outboundAction?.targetThreadKey, "target:qa");
+  } finally {
+    bus.stop();
+    await isolatedRuntime.shutdown();
+    await mcp.shutdown();
+    fixture.cleanup();
+  }
+});
+
 test("ConversationRouter honors binding registerConversation=false", async () => {
   const fixture = createStorageFixture({
     bindings: [
