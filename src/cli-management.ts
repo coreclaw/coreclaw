@@ -48,13 +48,17 @@ export const runPackInfo = (packId: string) => {
   }
   return {
     id: pack.id,
+    allowed: pack.allowed,
+    blockedReason: pack.blockedReason,
     manifest: pack.manifest,
     env: pack.manifest.env ?? [],
     skills: pack.skillRoots,
     mcp: pack.mcpFragments,
-    graph: resolveEffectivePackGraph(discovered.filter((entry) => entry.allowed), [packId], {
-      strict: config.packs.strict
-    }).map((entry) => entry.id),
+    graph: pack.allowed
+      ? resolveEffectivePackGraph(discovered.filter((entry) => entry.allowed), [packId], {
+          strict: config.packs.strict
+        }).map((entry) => entry.id)
+      : [],
     warnings: pack.warnings
   };
 };
