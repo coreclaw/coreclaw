@@ -124,6 +124,56 @@ test("pack preflight checks required env after effective graph merge", () => {
   }
 });
 
+test("pack preflight skips disabled profile pack graphs", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "coreclaw-preflight-disabled-profile-"));
+  const envName = "WORKCLAW_PREFLIGHT_DISABLED_PROFILE_ENV_TEST";
+  const previousEnv = process.env[envName];
+  try {
+    delete process.env[envName];
+    const workspaceDir = path.join(root, "workspace");
+    const dataDir = path.join(root, "data");
+    const packsRoot = path.join(root, "packs");
+    writePack(path.join(packsRoot, "disabled-pack"), {
+      id: "disabled-pack",
+      type: "role-pack",
+      description: "disabled",
+      env: [{ name: envName, required: true }]
+    });
+    const config = createConfig(workspaceDir, dataDir, {
+      packs: {
+        enabledRoots: [packsRoot]
+      },
+      profiles: {
+        list: [
+          {
+            id: "main",
+            name: "Main",
+            role: "general"
+          },
+          {
+            id: "archived",
+            name: "Archived",
+            role: "qa",
+            packs: ["disabled-pack"],
+            disabled: true
+          }
+        ]
+      }
+    });
+
+    const report = runPackPreflightChecks(config, null);
+    assert.deepEqual(report.profileGraphs, [{ profileId: "main", graph: [] }]);
+    assert.deepEqual(report.missingRequiredEnv, []);
+  } finally {
+    if (previousEnv === undefined) {
+      delete process.env[envName];
+    } else {
+      process.env[envName] = previousEnv;
+    }
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("runPreflightChecks enforces hardened security profile", () => {
   const previousProfile = process.env.CORECLAW_SECURITY_PROFILE;
   const previousAllowShell = process.env.CORECLAW_ALLOW_SHELL;

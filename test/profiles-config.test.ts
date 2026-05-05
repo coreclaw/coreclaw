@@ -120,6 +120,47 @@ test("ProfileRuntimeRegistry resolves nested relative workspace roots from cwd",
   }
 });
 
+test("ProfileRuntimeRegistry exposes active profiles separately from disabled profiles", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-profile-disabled-"));
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(root);
+    const config = createConfig("workspace", "data", {
+      profiles: {
+        defaults: {
+          workspaceRoot: "workspace/profiles",
+          stateRoot: "data/profiles",
+          llmProfile: "default",
+          toolProfile: "default"
+        },
+        list: [
+          {
+            id: "active",
+            name: "Active",
+            role: "dev"
+          },
+          {
+            id: "archived",
+            name: "Archived",
+            role: "qa",
+            disabled: true
+          }
+        ]
+      }
+    });
+
+    const registry = new ProfileRuntimeRegistry(config);
+    registry.ensureDirectories();
+    assert.deepEqual(registry.list().map((profile) => profile.id), ["active", "archived"]);
+    assert.deepEqual(registry.listActive().map((profile) => profile.id), ["active"]);
+    assert.equal(fs.existsSync(path.join(root, "workspace", "profiles", "active")), true);
+    assert.equal(fs.existsSync(path.join(root, "workspace", "profiles", "archived")), false);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("resolveProfilesConfig rejects duplicate profile ids", () => {
   const fixture = createStorageFixture();
   try {

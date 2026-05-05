@@ -23,6 +23,10 @@ export class ProfileRuntimeRegistry {
     return [...this.profilesById.values()];
   }
 
+  listActive(): ResolvedWorkclawProfile[] {
+    return this.list().filter((profile) => !profile.disabled);
+  }
+
   get(profileId: string): ResolvedWorkclawProfile | undefined {
     return this.profilesById.get(profileId);
   }
@@ -39,7 +43,7 @@ export class ProfileRuntimeRegistry {
   }
 
   ensureDirectories(): void {
-    for (const profile of this.profilesById.values()) {
+    for (const profile of this.listActive()) {
       fs.mkdirSync(profile.workspaceDir, { recursive: true });
       fs.mkdirSync(profile.stateDir, { recursive: true });
     }

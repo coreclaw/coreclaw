@@ -246,7 +246,7 @@ export const createCoreclawApp = async (
   for (const pack of discoveredPacks) {
     recordDiscoveredPackInstall(storage, pack);
   }
-  for (const profile of profileRegistry.list()) {
+  for (const profile of profileRegistry.listActive()) {
     const desired = new Set(profile.enabledPackIds);
     for (const enablement of storage.listProfilePackEnablements(profile.id)) {
       if (!desired.has(enablement.packId)) {
@@ -307,7 +307,7 @@ export const createCoreclawApp = async (
   };
 
   const loadProfileMcpGraphs = () =>
-    profileRegistry.list().map((profile) => ({
+    profileRegistry.listActive().map((profile) => ({
       profileId: profile.id,
       ...loadProfilePackGraph(
         storage,

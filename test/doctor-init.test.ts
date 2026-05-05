@@ -86,3 +86,34 @@ test("runDoctorChecks resolves config-defined pack graphs without storage warmup
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("runDoctorChecks reports disabled profiles without resolving their pack graphs", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-doctor-disabled-profile-"));
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(root);
+    runWorkclawInit(root);
+    const configPath = path.join(root, "config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    config.profiles.list.push({
+      id: "archived",
+      name: "Archived",
+      role: "qa",
+      workspace: "./missing-archived-workspace",
+      packs: ["missing-pack"],
+      disabled: true
+    });
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+    const report = runDoctorChecks();
+    assert.equal(report.profiles.find((profile) => profile.id === "archived")?.disabled, true);
+    assert.deepEqual(report.packs.effectiveGraphs, [{ profileId: "main", graph: [] }]);
+    assert.equal(
+      report.warnings.some((warning) => warning.includes("archived workspace is missing")),
+      false
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

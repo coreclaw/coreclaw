@@ -19,7 +19,7 @@ export const runPackPreflightChecks = (
   config: Config,
   baseMcpConfig: McpConfigFile | null
 ): PackPreflightReport => {
-  const profiles = resolveProfilesConfig(config);
+  const profiles = resolveProfilesConfig(config).filter((profile) => !profile.disabled);
   const discovered = discoverWorkclawPacks(config);
   const missingRequiredEnv = new Set<string>();
   const templateIssues = new Set<string>();

@@ -18,6 +18,7 @@ export type DoctorReport = {
     workspaceExists: boolean;
     stateDirExists: boolean;
     enabledPackIds: string[];
+    disabled: boolean;
   }>;
   packs: {
     discovered: Array<{ id: string; allowed: boolean; warnings: string[] }>;
@@ -76,13 +77,14 @@ export const runDoctorChecks = (): DoctorReport => {
       stateDir: profile.stateDir,
       workspaceExists: fs.existsSync(profile.workspaceDir),
       stateDirExists: fs.existsSync(profile.stateDir),
-      enabledPackIds: profile.enabledPackIds
+      enabledPackIds: profile.enabledPackIds,
+      disabled: profile.disabled
     }));
     const discovered = discoverWorkclawPacks(config);
     const warnings = [...discovered.flatMap((pack) => pack.warnings)];
     const effectiveGraphs: Array<{ profileId: string; graph: string[] }> = [];
     const profileRuntimeHealth: Array<{ profileId: string; status: "ok" | "warning" }> = [];
-    for (const profile of profiles) {
+    for (const profile of profiles.filter((entry) => !entry.disabled)) {
       if (!profile.workspaceExists) {
         warnings.push(`Profile ${profile.id} workspace is missing: ${profile.workspaceDir}`);
       }
