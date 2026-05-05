@@ -16,13 +16,13 @@ const resolveAction = (
   const action = binding.action ?? {};
   const mode = action.mode ?? "conversation";
   const defaultReplyMode =
-    mode === "silent-automation" || mode === "task-enqueue"
+    mode === "silent-automation"
       ? "silent"
       : mode === "fire-and-report"
         ? "report-only"
         : "normal";
   const defaultTargetMode =
-    mode === "silent-automation" || mode === "task-enqueue" ? "none" : "reply-to-event";
+    mode === "silent-automation" ? "none" : "reply-to-event";
   return {
     mode,
     threadKey: action.threadKeyTemplate

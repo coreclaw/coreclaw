@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { resolveBinding } from "../src/bindings/resolve.js";
 import { renderBindingTemplate } from "../src/bindings/template.js";
 import { getBindingTier } from "../src/bindings/match.js";
-import { WorkclawBindingPolicySchema } from "../src/bindings/schema.js";
+import { WorkclawBindingActionSchema, WorkclawBindingPolicySchema } from "../src/bindings/schema.js";
 
 const event = {
   id: "evt-1",
@@ -119,6 +119,13 @@ test("WorkclawBindingPolicySchema rejects misplaced no-match policy", () => {
   assert.throws(
     () => WorkclawBindingPolicySchema.parse({ onNoMatch: "warn" }),
     /Unrecognized key/
+  );
+});
+
+test("WorkclawBindingActionSchema rejects unimplemented task enqueue mode", () => {
+  assert.throws(
+    () => WorkclawBindingActionSchema.parse({ mode: "task-enqueue" }),
+    /Invalid option/
   );
 });
 

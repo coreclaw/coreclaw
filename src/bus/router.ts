@@ -214,10 +214,6 @@ export class ConversationRouter {
     event: WorkclawEvent,
     binding: RoutedWorkclawEvent | null
   ) {
-    if (binding?.action.mode === "task-enqueue") {
-      throw new Error("Binding mode 'task-enqueue' is not implemented.");
-    }
-
     const requestedProfileId = binding?.profileId ?? this.resolveConversationProfileId(message);
     const conversationChatId = binding?.conversationKey ?? message.chatId;
     const chat = this.storage.upsertChat({

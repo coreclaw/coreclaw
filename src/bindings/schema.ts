@@ -53,7 +53,7 @@ export const WorkclawBindingPolicySchema = z
 
 export const WorkclawBindingActionSchema = z
   .object({
-    mode: z.enum(["conversation", "fire-and-report", "silent-automation", "task-enqueue"]).optional(),
+    mode: z.enum(["conversation", "fire-and-report", "silent-automation"]).optional(),
     threadKeyTemplate: z.string().optional(),
     registerConversation: z.boolean().optional(),
     replyMode: z.enum(["normal", "silent", "report-only"]).optional(),

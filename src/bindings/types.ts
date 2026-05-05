@@ -40,7 +40,7 @@ export type WorkclawBindingPolicy = {
 };
 
 export type WorkclawBindingAction = {
-  mode?: "conversation" | "fire-and-report" | "silent-automation" | "task-enqueue";
+  mode?: "conversation" | "fire-and-report" | "silent-automation";
   threadKeyTemplate?: string;
   registerConversation?: boolean;
   replyMode?: "normal" | "silent" | "report-only";
@@ -65,7 +65,7 @@ export type WorkclawBinding = {
 };
 
 export type ResolvedBindingAction = {
-  mode: "conversation" | "fire-and-report" | "silent-automation" | "task-enqueue";
+  mode: "conversation" | "fire-and-report" | "silent-automation";
   threadKey?: string;
   registerConversation: boolean;
   replyMode: "normal" | "silent" | "report-only";
