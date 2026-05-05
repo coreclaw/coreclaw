@@ -529,9 +529,9 @@ Memory files live in the active profile workspace: `memory/MEMORY.md` (profile-g
 
 | Tool             | Parameters                                                                                                                                     | Description                                       |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `tasks.schedule` | `prompt: string`, `scheduleType: "cron"\|"interval"\|"once"`, `scheduleValue: string`, `contextMode?: "group"\|"isolated"` (default `"group"`) | Create a scheduled task                           |
+| `tasks.schedule` | `prompt: string`, `scheduleType: "cron"\|"interval"\|"once"`, `scheduleValue: string`, `contextMode?: "group"\|"full"\|"minimal"\|"isolated"` (default `"group"`) | Create a scheduled task                           |
 | `tasks.list`     | `includeInactive?: boolean` (default `true`)                                                                                                   | List tasks for this chat                          |
-| `tasks.update`   | `taskId: string`, `status?: "active"\|"paused"\|"done"`, `scheduleType?`, `scheduleValue?`, `contextMode?`                                     | Update a task. Cross-chat updates are admin only. |
+| `tasks.update`   | `taskId: string`, `status?: "active"\|"paused"\|"done"`, `scheduleType?`, `scheduleValue?`, `contextMode?: "group"\|"full"\|"minimal"\|"isolated"` | Update a task. Cross-chat updates are admin only. |
 
 `scheduleValue` format: cron expression for `cron`, milliseconds string for `interval`, ISO datetime for `once`.
 

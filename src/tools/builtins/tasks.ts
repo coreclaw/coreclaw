@@ -3,6 +3,8 @@ import type { ToolSpec } from "../registry.js";
 import { computeNextRun } from "../../scheduler/utils.js";
 import { nowIso } from "../../util/time.js";
 
+const taskContextModeSchema = z.enum(["group", "full", "minimal", "isolated"]);
+
 export const taskTools = (): ToolSpec<any>[] => {
   const scheduleTool: ToolSpec<any> = {
     name: "tasks.schedule",
@@ -11,7 +13,7 @@ export const taskTools = (): ToolSpec<any>[] => {
       prompt: z.string(),
       scheduleType: z.enum(["cron", "interval", "once"]),
       scheduleValue: z.string(),
-      contextMode: z.enum(["group", "isolated"]).default("group")
+      contextMode: taskContextModeSchema.default("group")
     }),
     async run(args, ctx) {
       const nextRunAt = computeNextRun(
@@ -58,7 +60,7 @@ export const taskTools = (): ToolSpec<any>[] => {
       status: z.enum(["active", "paused", "done"]).optional(),
       scheduleType: z.enum(["cron", "interval", "once"]).optional(),
       scheduleValue: z.string().optional(),
-      contextMode: z.enum(["group", "isolated"]).optional()
+      contextMode: taskContextModeSchema.optional()
     }),
     async run(args, ctx) {
       const existing = ctx.storage.getTask(args.taskId);
