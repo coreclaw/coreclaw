@@ -32,6 +32,36 @@ test("enqueueOutboundAction stores queued outbound actions", () => {
   }
 });
 
+test("enqueueOutboundAction returns existing action for duplicate dedupe key", () => {
+  const fixture = createStorageFixture();
+  try {
+    const first = enqueueOutboundAction(fixture.storage, {
+      id: "outbound-action:stable",
+      sourceEventId: "evt-1",
+      bindingId: "binding.qa",
+      profileId: "main",
+      targetSurface: "internal",
+      targetChannelKey: "qa",
+      dedupeKey: "binding.qa\u001fevt-1\u001finternal\u001f\u001f\u001fqa",
+      payload: { summary: "handoff" }
+    });
+    const second = enqueueOutboundAction(fixture.storage, {
+      sourceEventId: "evt-1",
+      bindingId: "binding.qa",
+      profileId: "main",
+      targetSurface: "internal",
+      targetChannelKey: "qa",
+      dedupeKey: "binding.qa\u001fevt-1\u001finternal\u001f\u001f\u001fqa",
+      payload: { summary: "handoff duplicate" }
+    });
+
+    assert.equal(second.id, first.id);
+    assert.equal(fixture.storage.listOutboundActions().length, 1);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("outbound action dispatch helpers update delivery state", () => {
   const fixture = createStorageFixture();
   try {

@@ -1177,9 +1177,15 @@ export class SqliteStorage {
     const id = params.id ?? newId();
     const createdAt = params.createdAt ?? nowIso();
     const updatedAt = params.updatedAt ?? createdAt;
+    if (params.dedupeKey) {
+      const existing = this.getOutboundActionByDedupeKey(params.dedupeKey);
+      if (existing) {
+        return existing;
+      }
+    }
     this.db
       .prepare(
-        "INSERT INTO outbound_actions(id, source_event_id, binding_id, profile_id, target_surface, target_source_key, target_thread_key, target_channel_key, dedupe_key, payload_json, delivery_state, retry_count, next_attempt_at, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+        "INSERT OR IGNORE INTO outbound_actions(id, source_event_id, binding_id, profile_id, target_surface, target_source_key, target_thread_key, target_channel_key, dedupe_key, payload_json, delivery_state, retry_count, next_attempt_at, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
       )
       .run(
         id,
@@ -1198,13 +1204,41 @@ export class SqliteStorage {
         createdAt,
         updatedAt
       );
-    return this.getOutboundAction(id)!;
+    return this.getOutboundAction(id) ?? this.getOutboundActionByDedupeKey(params.dedupeKey ?? "")!;
   }
 
   getOutboundAction(id: string): OutboundActionRecord | null {
     const row = this.db
       .prepare("SELECT * FROM outbound_actions WHERE id = ?")
       .get(id) as
+      | {
+          id: string;
+          source_event_id: string | null;
+          binding_id: string | null;
+          profile_id: string;
+          target_surface: string;
+          target_source_key: string | null;
+          target_thread_key: string | null;
+          target_channel_key: string | null;
+          dedupe_key: string | null;
+          payload_json: string;
+          delivery_state: OutboundActionRecord["deliveryState"];
+          retry_count: number;
+          next_attempt_at: string | null;
+          created_at: string;
+          updated_at: string;
+        }
+      | undefined;
+    return row ? this.mapOutboundActionRow(row) : null;
+  }
+
+  getOutboundActionByDedupeKey(dedupeKey: string): OutboundActionRecord | null {
+    if (!dedupeKey) {
+      return null;
+    }
+    const row = this.db
+      .prepare("SELECT * FROM outbound_actions WHERE dedupe_key = ?")
+      .get(dedupeKey) as
       | {
           id: string;
           source_event_id: string | null;

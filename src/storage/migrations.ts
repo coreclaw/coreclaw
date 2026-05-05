@@ -262,5 +262,13 @@ export const migrations: Migration[] = [
         updated_at TEXT NOT NULL
       );
     `
+  },
+  {
+    id: 12,
+    sql: `
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_outbound_actions_dedupe
+        ON outbound_actions(dedupe_key)
+        WHERE dedupe_key IS NOT NULL;
+    `
   }
 ];

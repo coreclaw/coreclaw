@@ -459,20 +459,33 @@ export class ConversationRouter {
         binding.action.outbound.targetMode === "explicit-target"
           ? binding.action.outbound.surface ?? event.surface
           : event.surface;
+      const targetSourceKey =
+        binding.action.outbound.targetMode === "explicit-target"
+          ? binding.action.outbound.sourceKey ?? null
+          : event.sourceKey;
+      const targetThreadKey = binding.action.outbound.threadKey ?? binding.action.threadKey ?? event.threadKey;
+      const targetChannelKey =
+        binding.action.outbound.targetMode === "explicit-target"
+          ? binding.action.outbound.channelKey ?? null
+          : event.channelKey;
+      const outboundActionDedupeKey = [
+        binding.bindingId,
+        event.id,
+        targetSurface,
+        targetSourceKey ?? "",
+        targetThreadKey ?? "",
+        targetChannelKey ?? ""
+      ].join("\u001f");
       enqueueOutboundAction(this.storage, {
+        id: `outbound-action:${createHash("sha256").update(outboundActionDedupeKey).digest("hex")}`,
         sourceEventId: event.id,
         bindingId: binding.bindingId,
         profileId: binding.profileId,
         targetSurface,
-        targetSourceKey:
-          binding.action.outbound.targetMode === "explicit-target"
-            ? binding.action.outbound.sourceKey ?? null
-            : event.sourceKey,
-        targetThreadKey: binding.action.outbound.threadKey ?? binding.action.threadKey ?? event.threadKey,
-        targetChannelKey:
-          binding.action.outbound.targetMode === "explicit-target"
-            ? binding.action.outbound.channelKey ?? null
-            : event.channelKey,
+        targetSourceKey,
+        targetThreadKey,
+        targetChannelKey,
+        dedupeKey: outboundActionDedupeKey,
         payload: {
           content: responseContent,
           replyToId: message.id,

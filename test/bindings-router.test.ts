@@ -251,6 +251,78 @@ test("ConversationRouter keeps immediate CLI replies while also recording outbou
   }
 });
 
+test("ConversationRouter does not duplicate outbound actions when completed inbound is retried", async () => {
+  let calls = 0;
+  const fixture = createStorageFixture({
+    bindings: [
+      {
+        id: "binding.retry.qa",
+        profileId: "qa",
+        match: {
+          surface: "cli",
+          event: "message.received"
+        }
+      }
+    ],
+    profiles: {
+      defaults: {
+        workspaceRoot: "profiles",
+        stateRoot: "state",
+        llmProfile: "default",
+        toolProfile: "default"
+      },
+      list: [
+        {
+          id: "qa",
+          name: "QA",
+          role: "qa"
+        }
+      ]
+    }
+  });
+  const provider = new MockProvider(async () => {
+    calls += 1;
+    return { content: "qa retry reply" };
+  });
+  fs.mkdirSync(path.join(fixture.rootDir, "profiles", "qa", "memory"), { recursive: true });
+  const runtime = new AgentRuntime(provider, new ToolRegistry(), fixture.config, logger);
+  const mcp = new McpManager({ logger });
+  const isolatedRuntime = new IsolatedToolRuntime(fixture.config, logger);
+  const contextBuilder = new ContextBuilder(fixture.storage, fixture.config, fixture.workspaceDir);
+  const bus = new MessageBus(fixture.storage, fixture.config, logger);
+  const router = new ConversationRouter(
+    fixture.storage,
+    contextBuilder,
+    runtime,
+    mcp,
+    bus,
+    logger,
+    fixture.config,
+    [],
+    isolatedRuntime
+  );
+
+  try {
+    const inbound = {
+      id: "evt-cli-retry-1",
+      channel: "cli",
+      chatId: "local",
+      senderId: "user",
+      content: "hello",
+      createdAt: new Date().toISOString()
+    };
+    await router.handleInbound(inbound);
+    await router.handleInbound(inbound);
+
+    assert.equal(calls, 1);
+    assert.equal(fixture.storage.listOutboundActions({ profileId: "qa" }).length, 1);
+  } finally {
+    await isolatedRuntime.shutdown();
+    await mcp.shutdown();
+    fixture.cleanup();
+  }
+});
+
 test("ConversationRouter sends same-surface explicit-target replies to resolved target chat", async () => {
   const fixture = createStorageFixture({
     bindings: [
