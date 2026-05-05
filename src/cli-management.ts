@@ -1,5 +1,9 @@
 import { SqliteStorage } from "./storage/sqlite.js";
-import { readLocalConfigFile, writeLocalConfigFile } from "./install/config-file.js";
+import {
+  materializeLocalProfilesConfig,
+  readLocalConfigFile,
+  writeLocalConfigFile
+} from "./install/config-file.js";
 import { loadConfig } from "./config/load.js";
 import { resolveProfilesConfig } from "./profiles/resolve.js";
 import { discoverWorkclawPacks } from "./packs/discovery.js";
@@ -74,16 +78,6 @@ const withLocalStorage = <T>(action: (storage: SqliteStorage) => T): T => {
   }
 };
 
-type LocalProfilesConfig = {
-  defaults?: Record<string, unknown>;
-  list?: Array<Record<string, unknown>>;
-};
-
-const getLocalProfilesConfig = (localConfig: Record<string, unknown>): LocalProfilesConfig =>
-  localConfig.profiles && typeof localConfig.profiles === "object"
-    ? (localConfig.profiles as LocalProfilesConfig)
-    : { defaults: {}, list: [] };
-
 const ensureAllowedPackGraph = (
   packId: string,
   discovered: ReturnType<typeof discoverWorkclawPacks>,
@@ -139,7 +133,7 @@ export const runPackEnable = (packId: string, profileId: string, rootDir: string
   ensureAllowedPackGraph(packId, discovered, config.packs.strict);
 
   const localConfig = readLocalConfigFile(rootDir);
-  const profiles = getLocalProfilesConfig(localConfig);
+  const profiles = materializeLocalProfilesConfig(localConfig);
   const list = profiles.list ?? [];
   const profile = list.find((entry) => entry.id === profileId);
   if (!profile) {
@@ -171,7 +165,7 @@ export const runPackEnable = (packId: string, profileId: string, rootDir: string
 export const runPackDisable = (packId: string, profileId: string, rootDir: string = process.cwd()) => {
   const config = loadConfig();
   const localConfig = readLocalConfigFile(rootDir);
-  const profiles = getLocalProfilesConfig(localConfig);
+  const profiles = materializeLocalProfilesConfig(localConfig);
   const list = profiles.list ?? [];
   const profile = list.find((entry) => entry.id === profileId);
   if (!profile) {

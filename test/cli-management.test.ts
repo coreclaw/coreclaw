@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { runWorkclawInit } from "../src/install/init.js";
 import { runProfileAdd } from "../src/install/profile-init.js";
 import { runPackInfo, runPacksList, runProfilesList, runProfilesResolve } from "../src/cli-management.js";
+import { loadConfig } from "../src/config/load.js";
 
 test("runProfileAdd updates config and scaffolds workspace", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-profile-add-"));
@@ -19,6 +20,34 @@ test("runProfileAdd updates config and scaffolds workspace", () => {
     assert.equal(fs.existsSync(path.join(result.workspaceDir, "ROLE.md")), true);
     assert.equal(fs.existsSync(path.join(result.workspaceDir, "memory", "MEMORY.md")), true);
     assert.ok(config.profiles.list.some((entry: { id: string }) => entry.id === "qa"));
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runProfileAdd preserves implicit main profile for legacy config", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-profile-add-legacy-"));
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(root);
+    runWorkclawInit(root);
+    const configPath = path.join(root, "config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    delete config.profiles;
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+    assert.deepEqual(loadConfig().profiles.list?.map((profile) => profile.id), ["main"]);
+    runProfileAdd("qa", "qa", root);
+
+    const updated = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    assert.deepEqual(
+      updated.profiles.list.map((profile: { id: string }) => profile.id),
+      ["main", "qa"]
+    );
+    assert.equal(updated.profiles.list[0].workspace, "./workspace");
+    assert.equal(updated.profiles.list[0].stateDir, "./data");
+    assert.deepEqual(loadConfig().profiles.list?.map((profile) => profile.id), ["main", "qa"]);
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(root, { recursive: true, force: true });

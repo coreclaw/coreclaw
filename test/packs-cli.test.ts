@@ -91,6 +91,40 @@ test("pack install and enable commands persist pack state and profile config", (
   }
 });
 
+test("pack enable materializes implicit main profile for legacy config", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-pack-cli-legacy-"));
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(root);
+    runWorkclawInit(root);
+    const configPath = path.join(root, "config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    delete config.profiles;
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+    const packRoot = path.join(root, "builtin-packs", "engineering-common");
+    fs.mkdirSync(packRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(packRoot, "workclaw.pack.json"),
+      JSON.stringify({ id: "engineering-common", type: "role-pack", description: "base" }),
+      "utf-8"
+    );
+
+    const enable = runPackEnable("engineering-common", "main", root);
+    const updated = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+
+    assert.equal(enable.enablement.profileId, "main");
+    assert.deepEqual(
+      updated.profiles.list.map((profile: { id: string }) => profile.id),
+      ["main"]
+    );
+    assert.deepEqual(updated.profiles.list[0].packs, ["engineering-common"]);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("pack info reports blocked discovered packs without graph errors", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-pack-info-blocked-"));
   const previousCwd = process.cwd();

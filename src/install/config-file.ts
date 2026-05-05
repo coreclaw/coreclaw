@@ -17,3 +17,31 @@ export const writeLocalConfigFile = (
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
   return configPath;
 };
+
+export type LocalProfilesConfig = {
+  defaults?: Record<string, unknown>;
+  list?: Array<Record<string, unknown>>;
+};
+
+export const getLocalProfilesConfig = (localConfig: Record<string, unknown>): LocalProfilesConfig =>
+  localConfig.profiles && typeof localConfig.profiles === "object"
+    ? (localConfig.profiles as LocalProfilesConfig)
+    : { defaults: {}, list: [] };
+
+export const materializeLocalProfilesConfig = (
+  localConfig: Record<string, unknown>
+): LocalProfilesConfig => {
+  const profiles = getLocalProfilesConfig(localConfig);
+  const list = profiles.list ?? [];
+  if (list.length === 0) {
+    list.push({
+      id: "main",
+      name: "Main",
+      role: "general",
+      workspace: typeof localConfig.workspaceDir === "string" ? localConfig.workspaceDir : "./workspace",
+      stateDir: typeof localConfig.dataDir === "string" ? localConfig.dataDir : "./data"
+    });
+  }
+  profiles.list = list;
+  return profiles;
+};

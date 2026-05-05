@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { readLocalConfigFile, writeLocalConfigFile } from "./config-file.js";
+import {
+  materializeLocalProfilesConfig,
+  readLocalConfigFile,
+  writeLocalConfigFile
+} from "./config-file.js";
 
 const DEFAULT_PROFILE_FILES: Record<string, string> = {
   "IDENTITY.md": "# Identity\n",
@@ -36,10 +40,7 @@ export const runProfileAdd = (
   rootDir: string = process.cwd()
 ) => {
   const config = readLocalConfigFile(rootDir);
-  const profiles =
-    config.profiles && typeof config.profiles === "object"
-      ? (config.profiles as { defaults?: Record<string, unknown>; list?: Array<Record<string, unknown>> })
-      : { defaults: {}, list: [] };
+  const profiles = materializeLocalProfilesConfig(config);
   const list = profiles.list ?? [];
   if (list.some((entry) => entry.id === profileId)) {
     throw new Error(`Profile already exists: ${profileId}`);
