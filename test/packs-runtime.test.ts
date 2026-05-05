@@ -111,7 +111,7 @@ test("pack MCP server scopes are derived from profile graphs", () => {
         servers: {
           devtools: { command: "node", args: ["dev.js"] },
           shared: { command: "node", args: ["shared-dev.js"] },
-          base: { command: "node", args: ["base-pack.js"] }
+          base: { command: "node", args: ["base.js"] }
         }
       }),
       "utf-8"
@@ -121,7 +121,7 @@ test("pack MCP server scopes are derived from profile graphs", () => {
       JSON.stringify({
         servers: {
           qatools: { command: "node", args: ["qa.js"] },
-          shared: { command: "node", args: ["shared-qa.js"] }
+          shared: { command: "node", args: ["shared-dev.js"] }
         }
       }),
       "utf-8"
@@ -147,6 +147,63 @@ test("pack MCP server scopes are derived from profile graphs", () => {
       qatools: ["qa"],
       shared: ["dev", "qa"]
     });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("pack MCP server merge rejects conflicting scoped server definitions", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-pack-mcp-conflict-"));
+  try {
+    const devFragment = path.join(root, "dev.json");
+    const qaFragment = path.join(root, "qa.json");
+    fs.writeFileSync(
+      devFragment,
+      JSON.stringify({
+        servers: {
+          shared: { command: "node", args: ["dev.js"] }
+        }
+      }),
+      "utf-8"
+    );
+    fs.writeFileSync(
+      qaFragment,
+      JSON.stringify({
+        servers: {
+          shared: { command: "node", args: ["qa.js"] }
+        }
+      }),
+      "utf-8"
+    );
+
+    assert.throws(
+      () =>
+        buildEffectiveMcpConfig(null, [
+          { mcpFragments: [devFragment] },
+          { mcpFragments: [qaFragment] }
+        ]),
+      /MCP server 'shared' has conflicting definitions/
+    );
+    assert.throws(
+      () =>
+        buildEffectiveMcpConfig(
+          {
+            servers: {
+              shared: { command: "node", args: ["base.js"] }
+            }
+          },
+          [{ mcpFragments: [devFragment] }]
+        ),
+      /MCP server 'shared' has conflicting definitions/
+    );
+    assert.throws(
+      () =>
+        buildMcpServerProfileScopes(null, [
+          { profileId: "dev", mcpFragments: [devFragment] },
+          { profileId: "qa", mcpFragments: [qaFragment] }
+        ]),
+      /MCP server 'shared' has conflicting definitions/
+    );
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

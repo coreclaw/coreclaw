@@ -50,6 +50,37 @@ const readMcpFragment = (fragmentPath: string): McpConfigFile => {
   return parseMcpConfigJson(fs.readFileSync(fragmentPath, "utf-8"));
 };
 
+const stableStringify = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableStringify(entry)).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`);
+    return `{${entries.join(",")}}`;
+  }
+  return JSON.stringify(value);
+};
+
+const assertCompatibleMcpServer = (
+  signatures: Map<string, string>,
+  server: string,
+  config: unknown,
+  source: string
+): boolean => {
+  const signature = stableStringify(config);
+  const existing = signatures.get(server);
+  if (!existing) {
+    signatures.set(server, signature);
+    return false;
+  }
+  if (existing !== signature) {
+    throw new Error(`MCP server '${server}' has conflicting definitions; use unique server names in ${source}.`);
+  }
+  return true;
+};
+
 export const buildEffectiveMcpConfig = (
   baseConfig: McpConfigFile | null,
   graphs: Array<{ mcpFragments: string[] }>
@@ -59,6 +90,10 @@ export const buildEffectiveMcpConfig = (
       ...(baseConfig?.servers ?? {})
     }
   };
+  const serverSignatures = new Map<string, string>();
+  for (const [server, serverConfig] of Object.entries(baseConfig?.servers ?? {})) {
+    serverSignatures.set(server, stableStringify(serverConfig));
+  }
 
   const seen = new Set<string>();
   for (const graph of graphs) {
@@ -68,7 +103,12 @@ export const buildEffectiveMcpConfig = (
       }
       seen.add(fragmentPath);
       const parsed = readMcpFragment(fragmentPath);
-      Object.assign(merged.servers, parsed.servers);
+      for (const [server, serverConfig] of Object.entries(parsed.servers)) {
+        if (assertCompatibleMcpServer(serverSignatures, server, serverConfig, fragmentPath)) {
+          continue;
+        }
+        merged.servers[server] = serverConfig;
+      }
     }
   }
 
@@ -80,6 +120,10 @@ export const buildMcpServerProfileScopes = (
   graphs: Array<{ profileId?: string; mcpFragments: string[] }>
 ): Map<string, Set<string>> => {
   const baseServers = new Set(Object.keys(baseConfig?.servers ?? {}));
+  const serverSignatures = new Map<string, string>();
+  for (const [server, serverConfig] of Object.entries(baseConfig?.servers ?? {})) {
+    serverSignatures.set(server, stableStringify(serverConfig));
+  }
   const scopes = new Map<string, Set<string>>();
 
   for (const graph of graphs) {
@@ -91,7 +135,8 @@ export const buildMcpServerProfileScopes = (
         continue;
       }
       const parsed = readMcpFragment(fragmentPath);
-      for (const server of Object.keys(parsed.servers)) {
+      for (const [server, serverConfig] of Object.entries(parsed.servers)) {
+        assertCompatibleMcpServer(serverSignatures, server, serverConfig, fragmentPath);
         if (baseServers.has(server)) {
           continue;
         }
