@@ -147,7 +147,7 @@ test("ConversationRouter routes normalized gitlab events through bindings and re
     });
 
     await waitUntil(() => fixture.storage.listOutboundActions().length >= 1);
-    const chat = fixture.storage.getChat("webhook", "mr-42", "dev");
+    const chat = fixture.storage.getChat("webhook", "gitlab:mr:42", "dev");
     const outbound = fixture.storage.listOutboundActions({ profileId: "dev" })[0];
 
     assert.equal(chat?.profileId, "dev");
@@ -243,6 +243,200 @@ test("ConversationRouter keeps immediate CLI replies while also recording outbou
     await waitUntil(() => outboundMessages.length >= 1);
     assert.equal(outboundMessages[0], "qa reply");
     assert.equal(fixture.storage.listOutboundActions({ profileId: "qa" }).length, 1);
+  } finally {
+    bus.stop();
+    await isolatedRuntime.shutdown();
+    await mcp.shutdown();
+    fixture.cleanup();
+  }
+});
+
+test("ConversationRouter honors binding registerConversation=false", async () => {
+  const fixture = createStorageFixture({
+    bindings: [
+      {
+        id: "binding.silent.audit",
+        profileId: "qa",
+        match: {
+          surface: "audit",
+          event: "message.received"
+        },
+        action: {
+          registerConversation: false,
+          replyMode: "silent",
+          outbound: { targetMode: "none" }
+        }
+      }
+    ],
+    profiles: {
+      defaults: {
+        workspaceRoot: "profiles",
+        stateRoot: "state",
+        llmProfile: "default",
+        toolProfile: "default"
+      },
+      list: [
+        {
+          id: "qa",
+          name: "QA",
+          role: "qa"
+        }
+      ]
+    },
+    bus: {
+      pollMs: 10,
+      batchSize: 20,
+      maxAttempts: 3,
+      retryBackoffMs: 10,
+      maxRetryBackoffMs: 100,
+      processingTimeoutMs: 500,
+      maxPendingInbound: 5_000,
+      maxPendingOutbound: 5_000,
+      overloadPendingThreshold: 2_000,
+      overloadBackoffMs: 500,
+      perChatRateLimitWindowMs: 60_000,
+      perChatRateLimitMax: 120
+    }
+  });
+  const provider = new MockProvider(async () => ({ content: "processed" }));
+  fs.mkdirSync(path.join(fixture.rootDir, "profiles", "qa", "memory"), { recursive: true });
+  const runtime = new AgentRuntime(provider, new ToolRegistry(), fixture.config, logger);
+  const mcp = new McpManager({ logger });
+  const isolatedRuntime = new IsolatedToolRuntime(fixture.config, logger);
+  const contextBuilder = new ContextBuilder(fixture.storage, fixture.config, fixture.workspaceDir);
+  const bus = new MessageBus(fixture.storage, fixture.config, logger);
+  const router = new ConversationRouter(
+    fixture.storage,
+    contextBuilder,
+    runtime,
+    mcp,
+    bus,
+    logger,
+    fixture.config,
+    [],
+    isolatedRuntime
+  );
+  bus.onInbound(router.handleInbound);
+
+  try {
+    bus.start();
+    bus.publishInbound({
+      id: "evt-audit-1",
+      channel: "webhook",
+      chatId: "audit-1",
+      senderId: "audit",
+      content: "run",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        surface: "audit"
+      }
+    });
+
+    await waitUntil(() => fixture.storage.countBusMessagesByStatus("inbound").processed >= 1);
+    const chat = fixture.storage.getChat("webhook", "webhook:audit-1", "qa");
+    assert.ok(chat);
+    assert.equal(fixture.storage.countMessages(chat.id), 0);
+  } finally {
+    bus.stop();
+    await isolatedRuntime.shutdown();
+    await mcp.shutdown();
+    fixture.cleanup();
+  }
+});
+
+test("ConversationRouter drops duplicated binding events within dedupe window", async () => {
+  let calls = 0;
+  const fixture = createStorageFixture({
+    bindings: [
+      {
+        id: "binding.dedupe",
+        profileId: "qa",
+        match: {
+          surface: "dedupe",
+          event: "message.received"
+        },
+        policy: {
+          dedupeWindowMs: 60_000
+        },
+        action: {
+          outbound: { targetMode: "none" }
+        }
+      }
+    ],
+    profiles: {
+      defaults: {
+        workspaceRoot: "profiles",
+        stateRoot: "state",
+        llmProfile: "default",
+        toolProfile: "default"
+      },
+      list: [
+        {
+          id: "qa",
+          name: "QA",
+          role: "qa"
+        }
+      ]
+    },
+    bus: {
+      pollMs: 10,
+      batchSize: 20,
+      maxAttempts: 3,
+      retryBackoffMs: 10,
+      maxRetryBackoffMs: 100,
+      processingTimeoutMs: 500,
+      maxPendingInbound: 5_000,
+      maxPendingOutbound: 5_000,
+      overloadPendingThreshold: 2_000,
+      overloadBackoffMs: 500,
+      perChatRateLimitWindowMs: 60_000,
+      perChatRateLimitMax: 120
+    }
+  });
+  const provider = new MockProvider(async () => {
+    calls += 1;
+    return { content: "processed" };
+  });
+  fs.mkdirSync(path.join(fixture.rootDir, "profiles", "qa", "memory"), { recursive: true });
+  const runtime = new AgentRuntime(provider, new ToolRegistry(), fixture.config, logger);
+  const mcp = new McpManager({ logger });
+  const isolatedRuntime = new IsolatedToolRuntime(fixture.config, logger);
+  const contextBuilder = new ContextBuilder(fixture.storage, fixture.config, fixture.workspaceDir);
+  const bus = new MessageBus(fixture.storage, fixture.config, logger);
+  const router = new ConversationRouter(
+    fixture.storage,
+    contextBuilder,
+    runtime,
+    mcp,
+    bus,
+    logger,
+    fixture.config,
+    [],
+    isolatedRuntime
+  );
+  bus.onInbound(router.handleInbound);
+
+  try {
+    bus.start();
+    const base = {
+      id: "same-event",
+      channel: "webhook",
+      chatId: "dedupe-1",
+      senderId: "dedupe",
+      content: "run",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        surface: "dedupe"
+      }
+    };
+    bus.publishInbound(base);
+    bus.publishInbound({
+      ...base,
+      chatId: "dedupe-2"
+    });
+
+    await waitUntil(() => fixture.storage.countBusMessagesByStatus("inbound").processed >= 2);
+    assert.equal(calls, 1);
   } finally {
     bus.stop();
     await isolatedRuntime.shutdown();

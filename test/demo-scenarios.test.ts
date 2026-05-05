@@ -162,10 +162,10 @@ test("GitLab merge request, Jenkins failure, issue intake, and Slack message rou
     });
 
     await waitUntil(() => fixture.storage.listOutboundActions().length >= 4);
-    assert.equal(fixture.storage.getChat("webhook", "mr-42", "dev")?.profileId, "dev");
-    assert.equal(fixture.storage.getChat("webhook", "build-1", "qa")?.profileId, "qa");
-    assert.equal(fixture.storage.getChat("webhook", "issue-1", "pm")?.profileId, "pm");
-    assert.equal(fixture.storage.getChat("webhook", "slack-thread", "pm")?.profileId, "pm");
+    assert.equal(fixture.storage.getChat("webhook", "gitlab:group/project", "dev")?.profileId, "dev");
+    assert.equal(fixture.storage.getChat("webhook", "jenkins:nightly", "qa")?.profileId, "qa");
+    assert.equal(fixture.storage.getChat("webhook", "issues:project", "pm")?.profileId, "pm");
+    assert.equal(fixture.storage.getChat("webhook", "slack:team", "pm")?.profileId, "pm");
   } finally {
     bus.stop();
     await isolatedRuntime.shutdown();

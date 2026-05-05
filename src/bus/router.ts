@@ -6,9 +6,14 @@ import type { AgentRuntime } from "../agent/runtime.js";
 import { BusDeferMessageError, type MessageBus } from "./bus.js";
 import type { Config } from "../config/schema.js";
 import { resolveBinding } from "../bindings/resolve.js";
-import type { WorkclawEvent, WorkclawRoutingHints } from "../bindings/types.js";
+import type {
+  RoutedWorkclawEvent,
+  WorkclawEvent,
+  WorkclawRoutingHints
+} from "../bindings/types.js";
 import type { Logger } from "pino";
 import type { SkillIndexEntry } from "../skills/types.js";
+import type { ResolvedWorkclawProfile } from "../profiles/types.js";
 import { compactConversation } from "../agent/compact.js";
 import {
   isHeartbeatRunMode,
@@ -18,7 +23,7 @@ import {
 import { nowIso } from "../util/time.js";
 import type { McpManager } from "../mcp/manager.js";
 import type { IsolatedToolRuntime } from "../isolation/runtime.js";
-import type { McpReloadRequest, McpReloadResult } from "../tools/registry.js";
+import type { McpReloadRequest, McpReloadResult, ToolContext } from "../tools/registry.js";
 import type { RuntimeTelemetry } from "../observability/telemetry.js";
 import type { HeartbeatController } from "../heartbeat/service.js";
 import { enqueueOutboundAction } from "../outbound/queue.js";
@@ -78,6 +83,9 @@ export class ConversationRouter {
   private queues = new Map<string, SerialQueue>();
   private queueOptions: RouterQueueOptions;
   private queueLastPruneAtMs = 0;
+  private bindingDedupeSeenAtMs = new Map<string, number>();
+  private bindingCooldownUntilMs = new Map<string, number>();
+  private bindingInFlight = new Map<string, number>();
 
   constructor(
     private storage: SqliteStorage,
@@ -93,7 +101,8 @@ export class ConversationRouter {
     private heartbeatController?: HeartbeatController,
     private wakeHeartbeat?: (reason: string) => void,
     private telemetry?: RuntimeTelemetry,
-    queueOptions?: Partial<RouterQueueOptions>
+    queueOptions?: Partial<RouterQueueOptions>,
+    private toolPolicyResolver?: (profileId?: string) => ToolContext["toolPolicy"]
   ) {
     const merged: RouterQueueOptions = {
       ...DEFAULT_ROUTER_QUEUE_OPTIONS,
@@ -116,7 +125,7 @@ export class ConversationRouter {
   }
 
   handleInbound = async (message: InboundMessage) => {
-    const key = `${this.resolveConversationProfileId(message)}:${message.channel}:${message.chatId}`;
+    const key = this.resolveQueueKey(message);
     const queue = this.queues.get(key) ?? new SerialQueue();
     this.queues.set(key, queue);
     if (!queue.isIdle()) {
@@ -172,11 +181,49 @@ export class ConversationRouter {
     const event = this.normalizeInboundEvent(message);
     const routingHints = this.extractRoutingHints(message);
     const binding = resolveBinding(event, this.config.bindings, routingHints);
+    const policyEntry = this.enterBindingPolicy(binding);
+    if (policyEntry.drop) {
+      this.logger.info(
+        {
+          bindingId: binding?.bindingId,
+          eventId: event.id
+        },
+        "inbound event dropped by binding dedupe policy"
+      );
+      return;
+    }
+    if (policyEntry.deferMs) {
+      throw new BusDeferMessageError(
+        "Inbound event deferred by binding policy",
+        policyEntry.deferMs
+      );
+    }
+
+    try {
+      await this.processRoutedMessage(message, event, binding);
+    } catch (error) {
+      policyEntry.rollback?.();
+      throw error;
+    } finally {
+      policyEntry.release?.();
+    }
+  }
+
+  private async processRoutedMessage(
+    message: InboundMessage,
+    event: WorkclawEvent,
+    binding: RoutedWorkclawEvent | null
+  ) {
+    if (binding?.action.mode === "task-enqueue") {
+      throw new Error("Binding mode 'task-enqueue' is not implemented.");
+    }
+
     const requestedProfileId = binding?.profileId ?? this.resolveConversationProfileId(message);
+    const conversationChatId = binding?.conversationKey ?? message.chatId;
     const chat = this.storage.upsertChat({
       profileId: requestedProfileId,
       channel: message.channel,
-      chatId: message.chatId
+      chatId: conversationChatId
     });
 
     if (this.mcpReloader) {
@@ -209,10 +256,33 @@ export class ConversationRouter {
         }
       : baseRunMode;
 
+    const { messages, profile } = this.contextBuilder.build({
+      chat,
+      inbound: message,
+      runMode,
+      skills
+    });
+    if (!this.isSurfaceAllowed(profile, event.surface)) {
+      this.logger.warn(
+        {
+          profileId: profile.id,
+          surface: event.surface,
+          bindingId: binding?.bindingId
+        },
+        "inbound event dropped by profile surface policy"
+      );
+      return;
+    }
+    const effectiveReplyMode =
+      binding?.action.replyMode ?? profile.surfaces.defaults?.replyMode ?? "normal";
+    const shouldRegisterConversation = binding?.action.registerConversation ?? true;
+    const toolPolicy = this.resolveToolPolicy(profile.id, profile.toolProfile);
+    const llm = this.resolveLlm(profile);
+
     const executionNow = nowIso();
     const execution = this.storage.startInboundExecution({
       channel: message.channel,
-      chatId: message.chatId,
+      chatId: conversationChatId,
       inboundId: message.id,
       now: executionNow,
       staleBefore: new Date(
@@ -223,7 +293,7 @@ export class ConversationRouter {
       this.logger.warn(
         {
           channel: message.channel,
-          chatId: message.chatId,
+          chatId: conversationChatId,
           inboundId: message.id
         },
         "inbound execution already in progress"
@@ -233,13 +303,6 @@ export class ConversationRouter {
         this.config.bus.retryBackoffMs
       );
     }
-
-    const { messages, profile } = this.contextBuilder.build({
-      chat,
-      inbound: message,
-      runMode,
-      skills
-    });
 
     const toolContext = {
       workspaceDir: profile.workspaceDir,
@@ -262,6 +325,7 @@ export class ConversationRouter {
       logger: this.logger,
       bus: this.bus,
       config: this.config,
+      toolPolicy,
       skills,
       mcpReloader: this.mcpReloader,
       isolatedRuntime: this.isolatedRuntime
@@ -287,7 +351,7 @@ export class ConversationRouter {
         try {
           this.storage.touchInboundExecution({
             channel: message.channel,
-            chatId: message.chatId,
+            chatId: conversationChatId,
             inboundId: message.id,
             updatedAt: nowIso()
           });
@@ -300,7 +364,8 @@ export class ConversationRouter {
       try {
         const result = await this.runtime.run({
           messages,
-          toolContext
+          toolContext,
+          llm
         });
         responseContent = result.content;
         toolMessages = result.toolMessages;
@@ -313,7 +378,7 @@ export class ConversationRouter {
       }
       this.storage.completeInboundExecution({
         channel: message.channel,
-        chatId: message.chatId,
+        chatId: conversationChatId,
         inboundId: message.id,
         responseContent,
         toolMessagesJson: JSON.stringify(toolMessages),
@@ -321,62 +386,64 @@ export class ConversationRouter {
       });
     }
 
-    const stored = this.config.storeFullMessages || chat.registered;
-    this.storage.insertMessage({
-      id: `user:${message.channel}:${message.chatId}:${message.id}`,
-      chatFk: chat.id,
-      senderId: message.senderId,
-      role: "user",
-      content: message.content,
-      stored,
-      createdAt: message.createdAt
-    });
-
-    for (const toolMessage of toolMessages) {
+    if (shouldRegisterConversation) {
+      const stored = this.config.storeFullMessages || chat.registered;
       this.storage.insertMessage({
-        id: `tool:${message.channel}:${message.chatId}:${message.id}:${toolMessage.tool_call_id}`,
+        id: `user:${message.channel}:${conversationChatId}:${message.id}`,
         chatFk: chat.id,
-        senderId: toolMessage.tool_call_id,
-        role: "tool",
-        content: toolMessage.content,
+        senderId: message.senderId,
+        role: "user",
+        content: message.content,
+        stored,
+        createdAt: message.createdAt
+      });
+
+      for (const toolMessage of toolMessages) {
+        this.storage.insertMessage({
+          id: `tool:${message.channel}:${conversationChatId}:${message.id}:${toolMessage.tool_call_id}`,
+          chatFk: chat.id,
+          senderId: toolMessage.tool_call_id,
+          role: "tool",
+          content: toolMessage.content,
+          stored: true,
+          createdAt: nowIso()
+        });
+      }
+
+      this.storage.insertMessage({
+        id: `assistant:${message.channel}:${conversationChatId}:${message.id}`,
+        chatFk: chat.id,
+        senderId: "assistant",
+        role: "assistant",
+        content: responseContent,
         stored: true,
         createdAt: nowIso()
       });
-    }
 
-    this.storage.insertMessage({
-      id: `assistant:${message.channel}:${message.chatId}:${message.id}`,
-      chatFk: chat.id,
-      senderId: "assistant",
-      role: "assistant",
-      content: responseContent,
-      stored: true,
-      createdAt: nowIso()
-    });
-
-    const shouldCompact =
-      this.storage.countMessages(chat.id) > this.config.historyMaxMessages * 2;
-    if (shouldCompact) {
-      const state = this.storage.getConversationState(chat.id);
-      const summarySource = this.storage
-        .listRecentMessages(chat.id, this.config.historyMaxMessages * 2)
-        .flatMap((entry) =>
-          (entry.role === "user" || entry.role === "assistant") && entry.content
-            ? [{ role: entry.role as "user" | "assistant", content: entry.content }]
-            : []
-        );
-      const summary = await compactConversation({
-        provider: this.runtime.provider,
-        config: this.config,
-        messages: summarySource
-      });
-      this.storage.setConversationState({
-        chatFk: chat.id,
-        summary,
-        enabledSkills: state.enabledSkills,
-        lastCompactAt: nowIso()
-      });
-      this.storage.pruneMessages(chat.id, this.config.historyMaxMessages);
+      const shouldCompact =
+        this.storage.countMessages(chat.id) > this.config.historyMaxMessages * 2;
+      if (shouldCompact) {
+        const state = this.storage.getConversationState(chat.id);
+        const summarySource = this.storage
+          .listRecentMessages(chat.id, this.config.historyMaxMessages * 2)
+          .flatMap((entry) =>
+            (entry.role === "user" || entry.role === "assistant") && entry.content
+              ? [{ role: entry.role as "user" | "assistant", content: entry.content }]
+              : []
+          );
+        const summary = await compactConversation({
+          provider: this.runtime.provider,
+          config: this.config,
+          messages: summarySource
+        });
+        this.storage.setConversationState({
+          chatFk: chat.id,
+          summary,
+          enabledSkills: state.enabledSkills,
+          lastCompactAt: nowIso()
+        });
+        this.storage.pruneMessages(chat.id, this.config.historyMaxMessages);
+      }
     }
 
     const outbound: OutboundMessage = {
@@ -434,7 +501,7 @@ export class ConversationRouter {
           (binding.action.outbound.targetMode === "reply-to-event" ||
             (binding.action.outbound.targetMode === "explicit-target" &&
               (binding.action.outbound.surface ?? event.surface) === message.channel)));
-      if (shouldSendImmediateReply && binding?.action.replyMode !== "silent") {
+      if (shouldSendImmediateReply && effectiveReplyMode === "normal") {
         this.bus.publishOutbound(outbound);
       }
       if (shouldWakeHeartbeatAfterRun(runMode)) {
@@ -453,6 +520,14 @@ export class ConversationRouter {
         error: errorMessage ?? undefined
       });
     }
+  }
+
+  private resolveQueueKey(message: InboundMessage): string {
+    const event = this.normalizeInboundEvent(message);
+    const binding = resolveBinding(event, this.config.bindings, this.extractRoutingHints(message));
+    const profileId = binding?.profileId ?? this.resolveConversationProfileId(message);
+    const chatId = binding?.conversationKey ?? message.chatId;
+    return `${profileId}:${message.channel}:${chatId}`;
   }
 
   private resolveConversationProfileId(message: InboundMessage): string {
@@ -527,6 +602,140 @@ export class ConversationRouter {
   private resolveSkills(profileId?: string): SkillIndexEntry[] {
     const resolved = typeof this.skills === "function" ? this.skills(profileId) : this.skills;
     return [...resolved];
+  }
+
+  private enterBindingPolicy(binding: RoutedWorkclawEvent | null): {
+    drop?: boolean;
+    deferMs?: number;
+    release?: () => void;
+    rollback?: () => void;
+  } {
+    if (!binding?.policy) {
+      return {};
+    }
+
+    const nowMs = Date.now();
+    const policy = binding.policy;
+    let dedupeKey: string | null = null;
+    let rollbackDedupe: (() => void) | undefined;
+    const markDedupe = () => {
+      if (!dedupeKey) {
+        return;
+      }
+      this.bindingDedupeSeenAtMs.set(dedupeKey, nowMs);
+      this.pruneBindingDedupe(nowMs);
+      rollbackDedupe = () => {
+        if (this.bindingDedupeSeenAtMs.get(dedupeKey!) === nowMs) {
+          this.bindingDedupeSeenAtMs.delete(dedupeKey!);
+        }
+      };
+    };
+
+    if (policy.dedupeWindowMs && policy.dedupeWindowMs > 0) {
+      dedupeKey = `${binding.bindingId}:${binding.event.id}`;
+      const lastSeenAtMs = this.bindingDedupeSeenAtMs.get(dedupeKey);
+      if (lastSeenAtMs !== undefined && nowMs - lastSeenAtMs <= policy.dedupeWindowMs) {
+        return { drop: true };
+      }
+    }
+
+    let cooldownKey: string | null = null;
+    if (policy.cooldownMs && policy.cooldownMs > 0) {
+      cooldownKey = `${binding.bindingId}:${binding.conversationKey}`;
+      const cooldownUntilMs = this.bindingCooldownUntilMs.get(cooldownKey) ?? 0;
+      if (nowMs < cooldownUntilMs) {
+        return { deferMs: Math.max(1, cooldownUntilMs - nowMs) };
+      }
+    }
+
+    if (policy.maxConcurrent && policy.maxConcurrent > 0) {
+      const current = this.bindingInFlight.get(binding.bindingId) ?? 0;
+      if (current >= policy.maxConcurrent) {
+        return { deferMs: this.config.bus.retryBackoffMs };
+      }
+      this.bindingInFlight.set(binding.bindingId, current + 1);
+      if (cooldownKey) {
+        this.bindingCooldownUntilMs.set(cooldownKey, nowMs + (policy.cooldownMs ?? 0));
+      }
+      markDedupe();
+      return {
+        rollback: rollbackDedupe,
+        release: () => {
+          const next = Math.max(0, (this.bindingInFlight.get(binding.bindingId) ?? 1) - 1);
+          if (next === 0) {
+            this.bindingInFlight.delete(binding.bindingId);
+          } else {
+            this.bindingInFlight.set(binding.bindingId, next);
+          }
+        }
+      };
+    }
+
+    if (cooldownKey) {
+      this.bindingCooldownUntilMs.set(cooldownKey, nowMs + (policy.cooldownMs ?? 0));
+    }
+    markDedupe();
+    return {
+      rollback: rollbackDedupe
+    };
+  }
+
+  private pruneBindingDedupe(nowMs: number) {
+    if (this.bindingDedupeSeenAtMs.size < 2_048) {
+      return;
+    }
+    const ttlMs = 24 * 60 * 60_000;
+    for (const [key, seenAtMs] of this.bindingDedupeSeenAtMs.entries()) {
+      if (nowMs - seenAtMs > ttlMs) {
+        this.bindingDedupeSeenAtMs.delete(key);
+      }
+    }
+  }
+
+  private isSurfaceAllowed(profile: ResolvedWorkclawProfile, surface: string): boolean {
+    if (profile.surfaces.deny?.includes(surface)) {
+      return false;
+    }
+    if (profile.surfaces.allow && profile.surfaces.allow.length > 0) {
+      return profile.surfaces.allow.includes(surface);
+    }
+    return true;
+  }
+
+  private resolveToolPolicy(
+    profileId: string | undefined,
+    fallbackToolProfile: string | undefined
+  ): ToolContext["toolPolicy"] {
+    const resolved = this.toolPolicyResolver?.(profileId);
+    if (resolved) {
+      return resolved;
+    }
+    if (!fallbackToolProfile) {
+      return undefined;
+    }
+    const configured = this.config.toolProfiles[fallbackToolProfile];
+    return configured
+      ? {
+          allow: configured.allow,
+          deny: configured.deny
+        }
+      : undefined;
+  }
+
+  private resolveLlm(profile: ResolvedWorkclawProfile): {
+    model?: string;
+    baseUrl?: string;
+    temperature?: number;
+  } {
+    if (!profile.llmProfile) {
+      return {};
+    }
+    const llmProfile = this.config.llm.profiles[profile.llmProfile];
+    return {
+      model: llmProfile?.model,
+      baseUrl: llmProfile?.baseUrl,
+      temperature: llmProfile?.temperature
+    };
   }
 
   private handleHeartbeatDelivery(params: {

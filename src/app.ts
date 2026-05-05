@@ -40,6 +40,32 @@ const ensureDir = (dir: string) => {
   fs.mkdirSync(dir, { recursive: true });
 };
 
+const mergeToolPolicies = (
+  ...policies: Array<ToolContext["toolPolicy"] | undefined>
+): ToolContext["toolPolicy"] => {
+  let allow: string[] | undefined;
+  const deny = new Set<string>();
+
+  for (const policy of policies) {
+    const policyAllow = policy?.allow?.filter(Boolean) ?? [];
+    if (policyAllow.length > 0) {
+      allow = allow
+        ? allow.filter((entry) => policyAllow.includes(entry))
+        : [...policyAllow];
+    }
+    for (const entry of policy?.deny ?? []) {
+      if (entry) {
+        deny.add(entry);
+      }
+    }
+  }
+
+  return {
+    ...(allow ? { allow: [...new Set(allow)] } : {}),
+    ...(deny.size > 0 ? { deny: [...deny] } : {})
+  };
+};
+
 const formatMcpResult = (result: unknown): string => {
   if (typeof result === "string") {
     return result;
@@ -242,6 +268,12 @@ export const createCoreclawApp = async (
     recordDiscoveredPackInstall(storage, pack);
   }
   for (const profile of profileRegistry.list()) {
+    const desired = new Set(profile.enabledPackIds);
+    for (const enablement of storage.listProfilePackEnablements(profile.id)) {
+      if (!desired.has(enablement.packId)) {
+        storage.disablePackForProfile(profile.id, enablement.packId);
+      }
+    }
     for (const packId of profile.enabledPackIds) {
       enablePackForProfile(storage, profile.id, packId);
     }
@@ -272,6 +304,20 @@ export const createCoreclawApp = async (
     );
     const roots = [config.skillsDir, ...packState.skillRoots];
     return new SkillLoader(roots).listSkills();
+  };
+
+  const resolveToolPolicyForProfile = (profileId = "main"): ToolContext["toolPolicy"] => {
+    const profile = profileRegistry.get(profileId);
+    const configuredProfilePolicy = profile?.toolProfile
+      ? config.toolProfiles[profile.toolProfile]
+      : undefined;
+    const packState = loadProfilePackGraph(
+      storage,
+      discoveredPacks.filter((pack) => pack.allowed),
+      profileId,
+      { strict: config.packs.strict }
+    );
+    return mergeToolPolicies(configuredProfilePolicy, packState.toolPolicy);
   };
 
   const listPackMcpFragments = () => {
@@ -584,7 +630,9 @@ export const createCoreclawApp = async (
     mcpReloader,
     heartbeatService,
     (reason) => heartbeatService.requestNow({ reason }),
-    telemetry
+    telemetry,
+    undefined,
+    (profileId) => resolveToolPolicyForProfile(profileId)
   );
   bus.onInbound(router.handleInbound);
   const scheduler = new Scheduler(

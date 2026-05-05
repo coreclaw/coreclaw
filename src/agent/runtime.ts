@@ -75,6 +75,7 @@ export interface LlmProvider {
     model: string;
     messages: ChatMessage[];
     tools?: ToolDefinition[];
+    baseUrl?: string;
     temperature?: number;
   }): Promise<{ content?: string; toolCalls?: ToolCall[] }>;
 }
@@ -89,6 +90,7 @@ export class OpenAICompatibleProvider implements LlmProvider {
     model: string;
     messages: ChatMessage[];
     tools?: ToolDefinition[];
+    baseUrl?: string;
     temperature?: number;
   }): Promise<{ content?: string; toolCalls?: ToolCall[] }> {
     const apiKey = this.config.provider.apiKey;
@@ -114,7 +116,7 @@ export class OpenAICompatibleProvider implements LlmProvider {
 
     let response: Response;
     try {
-      response = await this.fetchImpl(`${this.config.provider.baseUrl}/chat/completions`, {
+      response = await this.fetchImpl(`${req.baseUrl ?? this.config.provider.baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -184,6 +186,11 @@ export class AgentRuntime {
   async run(params: {
     messages: ChatMessage[];
     toolContext: ToolContext;
+    llm?: {
+      model?: string;
+      baseUrl?: string;
+      temperature?: number;
+    };
   }): Promise<{ content: string; toolMessages: ToolMessage[] }> {
     const messages: ChatMessage[] = [...params.messages];
     const toolMessages: ToolMessage[] = [];
@@ -193,10 +200,11 @@ export class AgentRuntime {
       const toolsForRequest = toolDefs.length > 0 ? toolDefs : undefined;
       const response = await withTimeout(
         this.provider.chat({
-          model: this.config.provider.model,
+          model: params.llm?.model ?? this.config.provider.model,
           messages,
           tools: toolsForRequest,
-          temperature: this.config.provider.temperature
+          baseUrl: params.llm?.baseUrl,
+          temperature: params.llm?.temperature ?? this.config.provider.temperature
         }),
         this.config.provider.timeoutMs,
         `LLM call timed out after ${this.config.provider.timeoutMs}ms`

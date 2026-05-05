@@ -4,9 +4,20 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { SkillLoader } from "../src/skills/loader.js";
+import { createCoreclawApp } from "../src/app.js";
 import { buildEffectiveMcpConfig, loadProfilePackGraph } from "../src/packs/loader.js";
 import { enablePackForProfile, recordDiscoveredPackInstall } from "../src/packs/install.js";
 import { createStorageFixture } from "./test-utils.js";
+
+const logger = {
+  fatal: () => undefined,
+  error: () => undefined,
+  warn: () => undefined,
+  info: () => undefined,
+  debug: () => undefined,
+  trace: () => undefined,
+  child: () => logger
+} as any;
 
 test("pack-enabled skill roots become visible to SkillLoader", () => {
   const fixture = createStorageFixture();
@@ -80,5 +91,35 @@ test("pack MCP fragments merge into effective runtime MCP config", () => {
     assert.deepEqual(Object.keys(merged.servers).sort(), ["base", "gitlab"]);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("createCoreclawApp removes stale pack enablements that are no longer in config", async () => {
+  const fixture = createStorageFixture({
+    cli: { enabled: false },
+    webhook: { enabled: false },
+    observability: {
+      enabled: false,
+      http: { enabled: false, host: "127.0.0.1", port: 3210 }
+    }
+  });
+  try {
+    fixture.storage.enablePackForProfile({
+      profileId: "main",
+      packId: "stale-pack"
+    });
+    const app = await createCoreclawApp({
+      config: fixture.config,
+      logger
+    });
+    try {
+      assert.equal(app.storage.getProfilePackEnablement("main", "stale-pack"), null);
+    } finally {
+      await app.mcpManager.shutdown();
+      await app.isolatedRuntime.shutdown();
+      app.storage.close();
+    }
+  } finally {
+    fixture.cleanup();
   }
 });

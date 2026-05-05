@@ -212,6 +212,109 @@ test("ConversationRouter persists requested profile id and uses profile workspac
   }
 });
 
+test("ConversationRouter applies per-profile LLM model and temperature", async () => {
+  const seen: Array<{ model: string; temperature?: number }> = [];
+  const fixture = createStorageFixture({
+    llm: {
+      profiles: {
+        qaModel: {
+          provider: "openai",
+          model: "qa-model",
+          temperature: 0.7
+        }
+      }
+    },
+    profiles: {
+      defaults: {
+        workspaceRoot: "profiles",
+        stateRoot: "state",
+        llmProfile: "default",
+        toolProfile: "default"
+      },
+      list: [
+        {
+          id: "qa",
+          name: "QA",
+          role: "qa",
+          llmProfile: "qaModel"
+        }
+      ]
+    },
+    bus: {
+      pollMs: 10,
+      batchSize: 20,
+      maxAttempts: 3,
+      retryBackoffMs: 10,
+      maxRetryBackoffMs: 100,
+      processingTimeoutMs: 500,
+      maxPendingInbound: 5_000,
+      maxPendingOutbound: 5_000,
+      overloadPendingThreshold: 2_000,
+      overloadBackoffMs: 500,
+      perChatRateLimitWindowMs: 60_000,
+      perChatRateLimitMax: 120
+    }
+  });
+
+  const qaWorkspace = path.join(fixture.rootDir, "profiles", "qa");
+  fs.mkdirSync(path.join(qaWorkspace, "memory"), { recursive: true });
+  const telemetry = new RuntimeTelemetry();
+  const mcp = new McpManager({ logger });
+  const isolatedRuntime = new IsolatedToolRuntime(fixture.config, logger);
+  const registry = new ToolRegistry(undefined, telemetry);
+  const provider = new MockProvider(async (req) => {
+    seen.push({ model: req.model, temperature: req.temperature });
+    return { content: "ok" };
+  });
+  const runtime = new AgentRuntime(provider, registry, fixture.config, logger);
+  const profileRegistry = new ProfileRuntimeRegistry(fixture.config, {
+    instanceRoot: fixture.rootDir
+  });
+  const contextBuilder = new ContextBuilder(
+    fixture.storage,
+    fixture.config,
+    fixture.workspaceDir,
+    profileRegistry
+  );
+  const bus = new MessageBus(fixture.storage, fixture.config, logger);
+  const router = new ConversationRouter(
+    fixture.storage,
+    contextBuilder,
+    runtime,
+    mcp,
+    bus,
+    logger,
+    fixture.config,
+    [],
+    isolatedRuntime
+  );
+  bus.onInbound(router.handleInbound);
+
+  try {
+    bus.start();
+    bus.publishInbound({
+      id: "profile-llm-1",
+      channel: "cli",
+      chatId: "local",
+      senderId: "user",
+      content: "run",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        profileId: "qa"
+      }
+    });
+
+    await waitUntil(() => seen.length >= 1);
+    assert.equal(seen[0]?.model, "qa-model");
+    assert.equal(seen[0]?.temperature, 0.7);
+  } finally {
+    bus.stop();
+    await isolatedRuntime.shutdown();
+    await mcp.shutdown();
+    fixture.cleanup();
+  }
+});
+
 test("createCoreclawApp materializes configured profile workspace and state directories", async () => {
   const fixture = createStorageFixture({
     profiles: {

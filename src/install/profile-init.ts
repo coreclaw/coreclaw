@@ -3,6 +3,8 @@ import path from "node:path";
 import { readLocalConfigFile, writeLocalConfigFile } from "./config-file.js";
 
 const DEFAULT_PROFILE_FILES: Record<string, string> = {
+  "IDENTITY.md": "# Identity\n",
+  "USER.md": "# User\n",
   "ROLE.md": "# Role\n",
   "TEAM.md": "# Team\n",
   "PROJECT.md": "# Project\n",
@@ -16,6 +18,10 @@ export const scaffoldProfileWorkspace = (workspaceDir: string): void => {
   fs.mkdirSync(path.join(workspaceDir, "skills"), { recursive: true });
   fs.mkdirSync(path.join(workspaceDir, "playbooks"), { recursive: true });
   fs.mkdirSync(path.join(workspaceDir, "templates"), { recursive: true });
+  const memoryPath = path.join(workspaceDir, "memory", "MEMORY.md");
+  if (!fs.existsSync(memoryPath)) {
+    fs.writeFileSync(memoryPath, "# Memory\n", "utf-8");
+  }
   for (const [fileName, content] of Object.entries(DEFAULT_PROFILE_FILES)) {
     const filePath = path.join(workspaceDir, fileName);
     if (!fs.existsSync(filePath)) {

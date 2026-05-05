@@ -14,6 +14,10 @@ const DEFAULT_TEAM_FILES: Record<string, string> = {
 
 export const scaffoldTeamWorkspace = (workspaceDir: string): void => {
   fs.mkdirSync(path.join(workspaceDir, "memory"), { recursive: true });
+  const memoryPath = path.join(workspaceDir, "memory", "MEMORY.md");
+  if (!fs.existsSync(memoryPath)) {
+    fs.writeFileSync(memoryPath, "# Memory\n", "utf-8");
+  }
   for (const [fileName, content] of Object.entries(DEFAULT_TEAM_FILES)) {
     const filePath = path.join(workspaceDir, fileName);
     if (!fs.existsSync(filePath)) {

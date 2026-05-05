@@ -15,7 +15,9 @@ test("runProfileAdd updates config and scaffolds workspace", () => {
     runWorkclawInit(root);
     const result = runProfileAdd("qa", "qa", root);
     const config = JSON.parse(fs.readFileSync(path.join(root, "config.json"), "utf-8"));
+    assert.equal(fs.existsSync(path.join(result.workspaceDir, "IDENTITY.md")), true);
     assert.equal(fs.existsSync(path.join(result.workspaceDir, "ROLE.md")), true);
+    assert.equal(fs.existsSync(path.join(result.workspaceDir, "memory", "MEMORY.md")), true);
     assert.ok(config.profiles.list.some((entry: { id: string }) => entry.id === "qa"));
   } finally {
     process.chdir(previousCwd);

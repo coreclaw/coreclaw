@@ -85,6 +85,7 @@ export type RoutedWorkclawEvent = {
   profileId: string;
   conversationKey: string;
   action: ResolvedBindingAction;
+  policy?: WorkclawBindingPolicy;
   bindingId: string;
   tier: number;
 };

@@ -123,6 +123,41 @@ test("policy engine allows admin fs.write on protected workspace paths", async (
   }
 });
 
+test("policy engine enforces profile tool allow and deny lists", async () => {
+  const fixture = createStorageFixture();
+  try {
+    const chat = fixture.storage.upsertChat({ channel: "cli", chatId: "local" });
+    const registry = new ToolRegistry(new DefaultToolPolicyEngine());
+    for (const tool of fsTools()) {
+      registry.register(tool);
+    }
+    const { context } = createToolContext({
+      config: fixture.config,
+      storage: fixture.storage,
+      workspaceDir: fixture.workspaceDir,
+      chatFk: chat.id,
+      chatRole: "normal",
+      toolPolicy: {
+        allow: ["fs.*"],
+        deny: ["fs.read"]
+      }
+    });
+
+    await assert.rejects(
+      registry.execute("fs.read", { path: "README.md" }, context),
+      /denied by profile tool policy/
+    );
+
+    context.toolPolicy = { allow: ["memory.*"] };
+    await assert.rejects(
+      registry.execute("fs.list", {}, context),
+      /not allowed by profile tool policy/
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("policy engine blocks normal user cross-chat message.send", async () => {
   const fixture = createStorageFixture();
   try {

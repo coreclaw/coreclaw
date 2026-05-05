@@ -12,8 +12,10 @@ test("runWorkclawInit scaffolds config and main profile workspace", () => {
   try {
     const result = runWorkclawInit(root);
     assert.equal(fs.existsSync(result.configPath), true);
+    assert.equal(fs.existsSync(path.join(result.mainProfileDir, "IDENTITY.md")), true);
     assert.equal(fs.existsSync(path.join(result.mainProfileDir, "ROLE.md")), true);
     assert.equal(fs.existsSync(path.join(result.mainProfileDir, "MEMORY.md")), true);
+    assert.equal(fs.existsSync(path.join(result.mainProfileDir, "memory", "MEMORY.md")), true);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -27,6 +29,7 @@ test("scaffoldTeamWorkspace creates team overlay files", () => {
     assert.equal(fs.existsSync(path.join(teamDir, "TEAM.md")), true);
     assert.equal(fs.existsSync(path.join(teamDir, "PROCESS.md")), true);
     assert.equal(fs.existsSync(path.join(teamDir, "MEMORY.md")), true);
+    assert.equal(fs.existsSync(path.join(teamDir, "memory", "MEMORY.md")), true);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

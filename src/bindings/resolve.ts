@@ -14,16 +14,25 @@ const resolveAction = (
   hints?: WorkclawRoutingHints
 ): ResolvedBindingAction => {
   const action = binding.action ?? {};
+  const mode = action.mode ?? "conversation";
+  const defaultReplyMode =
+    mode === "silent-automation" || mode === "task-enqueue"
+      ? "silent"
+      : mode === "fire-and-report"
+        ? "report-only"
+        : "normal";
+  const defaultTargetMode =
+    mode === "silent-automation" || mode === "task-enqueue" ? "none" : "reply-to-event";
   return {
-    mode: action.mode ?? "conversation",
+    mode,
     threadKey: action.threadKeyTemplate
       ? renderBindingTemplate(action.threadKeyTemplate, event)
       : event.threadKey,
     registerConversation: action.registerConversation ?? true,
-    replyMode: action.replyMode ?? "normal",
+    replyMode: action.replyMode ?? defaultReplyMode,
     contextMode: action.contextMode ?? "full",
     outbound: {
-      targetMode: hints?.suppressOutbound ? "none" : action.outbound?.targetMode ?? "reply-to-event",
+      targetMode: hints?.suppressOutbound ? "none" : action.outbound?.targetMode ?? defaultTargetMode,
       surface: action.outbound?.surface,
       sourceKey: action.outbound?.sourceKeyTemplate
         ? renderBindingTemplate(action.outbound.sourceKeyTemplate, event)
@@ -60,8 +69,9 @@ export const resolveBinding = (
   return {
     event,
     profileId: selected.binding.profileId,
-    conversationKey: action.threadKey ?? event.threadKey ?? `${event.surface}:${event.sourceKey}`,
+    conversationKey: action.threadKey ?? event.threadKey ?? event.sourceKey,
     action,
+    policy: selected.binding.policy,
     bindingId: selected.binding.id,
     tier: selected.tier
   };

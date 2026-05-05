@@ -301,6 +301,7 @@ export const createToolContext = (params: {
   profileId?: string;
   chatRole?: "admin" | "normal";
   chatFk?: string;
+  toolPolicy?: ToolContext["toolPolicy"];
   skills?: SkillIndexEntry[];
   isolatedRuntime?: IsolatedToolRuntime;
   heartbeat?: HeartbeatController;
@@ -331,6 +332,7 @@ export const createToolContext = (params: {
       start: () => undefined
     } as any,
     config: params.config,
+    toolPolicy: params.toolPolicy,
     skills: params.skills ?? [],
     isolatedRuntime: params.isolatedRuntime
   };

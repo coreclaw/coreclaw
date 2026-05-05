@@ -115,7 +115,7 @@ export const runCli = async (
   if (args[0] === "profiles" && args[1] === "resolve") {
     const profileId = args[2]?.trim();
     if (!profileId) {
-      throw new Error("Missing profile id for 'workclaw profiles resolve'.");
+      throw new Error(`Missing profile id for '${branding.commandName} profiles resolve'.`);
     }
     process.stdout.write(`${JSON.stringify(runProfilesResolve(profileId), null, 2)}\n`);
     return;
@@ -123,7 +123,7 @@ export const runCli = async (
   if (args[0] === "profile" && args[1] === "add") {
     const profileId = args[2]?.trim();
     if (!profileId) {
-      throw new Error("Missing profile id for 'workclaw profile add'.");
+      throw new Error(`Missing profile id for '${branding.commandName} profile add'.`);
     }
     process.stdout.write(`${JSON.stringify(runProfileAdd(profileId), null, 2)}\n`);
     return;
@@ -135,7 +135,7 @@ export const runCli = async (
   if ((args[0] === "packs" || args[0] === "pack") && args[1] === "info") {
     const packId = args[2]?.trim();
     if (!packId) {
-      throw new Error("Missing pack id for 'workclaw packs info'.");
+      throw new Error(`Missing pack id for '${branding.commandName} packs info'.`);
     }
     process.stdout.write(`${JSON.stringify(runPackInfo(packId), null, 2)}\n`);
     return;
@@ -176,7 +176,7 @@ export const runCli = async (
   if (args[0] === "team" && args[1] === "init") {
     const teamId = args[2]?.trim();
     if (!teamId) {
-      throw new Error("Missing team id for 'workclaw team init'.");
+      throw new Error(`Missing team id for '${branding.commandName} team init'.`);
     }
     process.stdout.write(`${JSON.stringify(runTeamInit(teamId), null, 2)}\n`);
     return;

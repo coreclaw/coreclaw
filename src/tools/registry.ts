@@ -53,6 +53,10 @@ export type ToolContext = {
   logger: Logger;
   bus: MessageBus;
   config: Config;
+  toolPolicy?: {
+    allow?: string[];
+    deny?: string[];
+  };
   skills: SkillIndexEntry[];
   isolatedRuntime?: IsolatedToolRuntime;
 };

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { parseWorkclawPluginManifest, validatePluginConfigSchemaPath } from "./schema.js";
 import type { DiscoveredWorkclawPlugin } from "./types.js";
 
@@ -63,7 +64,7 @@ export class NativePluginRegistry {
     if (!fs.existsSync(runtimePath)) {
       throw new Error(`Plugin runtime entry is missing: ${runtimePath}`);
     }
-    const loaded = await import(pathToFileUrl(runtimePath));
+    const loaded = await import(pathToFileURL(runtimePath).href);
     this.loaded.set(plugin.id, loaded);
     return loaded;
   }
@@ -72,5 +73,3 @@ export class NativePluginRegistry {
     return this.loaded.get(pluginId);
   }
 }
-
-const pathToFileUrl = (filePath: string) => `file://${filePath}`;

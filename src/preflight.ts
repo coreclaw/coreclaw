@@ -38,16 +38,34 @@ export const runPreflightChecks = (options: PreflightOptions = {}): PreflightRep
   const mcpConfig = readMcpConfigFile(resolvedMcpConfigPath);
   const workspaceDir = path.resolve(config.workspaceDir);
   const workspaceExists = fs.existsSync(workspaceDir);
-  const identityFilePresent = fs.existsSync(path.join(workspaceDir, "IDENTITY.md"));
-  const toolsFilePresent = fs.existsSync(path.join(workspaceDir, "TOOLS.md"));
   const providerApiKeyPresent = Boolean(config.provider.apiKey?.trim());
   const profiles = resolveProfilesConfig(config);
+  const profileIdentityChecks = profiles.map((profile) =>
+    fs.existsSync(path.join(profile.workspaceDir, "IDENTITY.md"))
+  );
+  const profileToolsChecks = profiles.map((profile) =>
+    fs.existsSync(path.join(profile.workspaceDir, "TOOLS.md"))
+  );
+  const identityFilePresent =
+    fs.existsSync(path.join(workspaceDir, "IDENTITY.md")) ||
+    (profileIdentityChecks.length > 0 && profileIdentityChecks.every(Boolean));
+  const toolsFilePresent =
+    fs.existsSync(path.join(workspaceDir, "TOOLS.md")) ||
+    (profileToolsChecks.length > 0 && profileToolsChecks.every(Boolean));
   const packReport = runPackPreflightChecks(config, mcpConfig);
   const surfaceAuthConsistent = !config.webhook.enabled || Boolean(config.webhook.authToken?.trim());
 
   const warnings: string[] = [];
   if (!workspaceExists) {
     warnings.push(`Workspace directory does not exist yet: ${workspaceDir}`);
+  }
+  for (const profile of profiles) {
+    if (!fs.existsSync(path.join(profile.workspaceDir, "IDENTITY.md"))) {
+      warnings.push(`Profile ${profile.id} is missing IDENTITY.md: ${profile.workspaceDir}`);
+    }
+    if (!fs.existsSync(path.join(profile.workspaceDir, "TOOLS.md"))) {
+      warnings.push(`Profile ${profile.id} is missing TOOLS.md: ${profile.workspaceDir}`);
+    }
   }
   if (!providerApiKeyPresent) {
     warnings.push("OPENAI_API_KEY is not set.");

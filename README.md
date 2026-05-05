@@ -515,7 +515,7 @@ Commands are tokenized and executed directly (no shell interpreter). If `allowed
 | `memory.read`  | `scope?: "global"\|"chat"\|"all"` (default `"all"`)                                                                 | Read memory content                       |
 | `memory.write` | `scope?: "global"\|"chat"` (default `"chat"`), `content: string`, `mode?: "append"\|"replace"` (default `"append"`) | Write memory. Global scope is admin only. |
 
-Memory files: `workspace/memory/MEMORY.md` (global), `workspace/memory/{channel}_{chatId}.md` (per-chat).
+Memory files live in the active profile workspace: `memory/MEMORY.md` (profile-global), `memory/{channel}_{chatId}.md` (per-chat).
 
 #### Messaging
 
@@ -597,14 +597,14 @@ The first admin is created through a bootstrap flow:
 
 ### Protected Workspace Paths
 
-Non-admin `fs.write` is denied for: `IDENTITY.md`, `TOOLS.md`, `USER.md`, `.mcp.json`, `skills/` (and any path under it).
+Non-admin `fs.write` is denied for these paths inside the active profile workspace: `IDENTITY.md`, `TOOLS.md`, `USER.md`, `.mcp.json`, `skills/` (and any path under it).
 
 ## Memory
 
 Coreclaw maintains two types of persistent memory:
 
-- **Global memory** (`workspace/memory/MEMORY.md`): shared across all chats. Admin-only for writes.
-- **Per-chat memory** (`workspace/memory/{channel}_{chatId}.md`): scoped to a specific chat session.
+- **Profile memory** (`<profile-workspace>/memory/MEMORY.md`): shared across chats for one profile. Admin-only for writes.
+- **Per-chat memory** (`<profile-workspace>/memory/{channel}_{chatId}.md`): scoped to a specific chat session.
 
 Both are automatically included in the system prompt when available, except isolated scheduled-task runs (chat memory excluded).
 
@@ -736,13 +736,21 @@ Detailed incident and recovery procedures are documented in `RUNBOOK.md`.
 
 ```
 workspace/
-  IDENTITY.md
-  USER.md
-  TOOLS.md
-  memory/
-    MEMORY.md
-  skills/
-    <skill-name>/SKILL.md
+  profiles/
+    main/
+      IDENTITY.md
+      USER.md
+      TOOLS.md
+      memory/
+        MEMORY.md
+      skills/
+        <skill-name>/SKILL.md
+  teams/
+    <team-id>/
+      TEAM.md
+      PROCESS.md
+      memory/
+        MEMORY.md
 ```
 
 ## Roadmap
