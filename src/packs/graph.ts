@@ -4,8 +4,7 @@ import type {
   WorkclawPackToolPolicy
 } from "./types.js";
 import { PackGraphError } from "./errors.js";
-
-const dedupe = (values: string[] | undefined): string[] => [...new Set(values ?? [])];
+import { mergeToolPolicies } from "../tools/policy-merge.js";
 
 export const resolveEffectivePackGraph = (
   discovered: Iterable<DiscoveredWorkclawPack>,
@@ -69,8 +68,6 @@ export const mergePackEnvRequirements = (
 export const mergePackToolPolicies = (
   graph: DiscoveredWorkclawPack[]
 ): WorkclawPackToolPolicy => {
-  let allow: string[] | undefined;
-  const deny = new Set<string>();
   let profile: string | undefined;
   let elevatedEnabled = true;
 
@@ -82,21 +79,15 @@ export const mergePackToolPolicies = (
     if (policy.profile) {
       profile = policy.profile;
     }
-    if (policy.allow) {
-      allow = allow ? allow.filter((entry) => policy.allow?.includes(entry)) : [...policy.allow];
-    }
-    for (const entry of policy.deny ?? []) {
-      deny.add(entry);
-    }
     if (policy.elevated?.enabled === false) {
       elevatedEnabled = false;
     }
   }
 
+  const merged = mergeToolPolicies(...graph.map((pack) => pack.manifest.toolPolicy));
   return {
     ...(profile ? { profile } : {}),
-    ...(allow ? { allow: dedupe(allow) } : {}),
-    ...(deny.size > 0 ? { deny: [...deny] } : {}),
+    ...merged,
     elevated: { enabled: elevatedEnabled }
   };
 };

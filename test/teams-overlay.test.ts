@@ -51,6 +51,45 @@ test("applyTeamOverlay appends packs and merges tool policy without changing sur
   }
 });
 
+test("applyTeamOverlay preserves layered glob allow policy", () => {
+  const fixture = createStorageFixture({
+    profiles: {
+      list: [
+        {
+          id: "dev",
+          name: "Developer",
+          role: "dev"
+        }
+      ]
+    }
+  });
+  try {
+    const profile = resolveProfilesConfig(fixture.config)[0]!;
+    const merged = applyTeamOverlay(
+      {
+        ...profile,
+        toolPolicy: { allow: ["fs.*"] }
+      },
+      {
+        id: "team-core",
+        name: "Core Team",
+        workspaceDir: "/tmp/team-core",
+        toolPolicy: {
+          allow: ["fs.read"]
+        }
+      }
+    );
+
+    assert.deepEqual(merged.toolPolicy.allow, ["fs.read"]);
+    assert.deepEqual((merged.toolPolicy as { allowGroups?: string[][] }).allowGroups, [
+      ["fs.*"],
+      ["fs.read"]
+    ]);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("team overlay migration adds persistent overlay records", () => {
   const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-team-overlay-"));
   const workspaceDir = path.join(rootDir, "workspace");

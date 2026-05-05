@@ -35,35 +35,10 @@ import type {
 import { discoverWorkclawPacks } from "./packs/discovery.js";
 import { loadProfilePackGraph, buildEffectiveMcpConfig } from "./packs/loader.js";
 import { recordDiscoveredPackInstall, enablePackForProfile } from "./packs/install.js";
+import { mergeToolPolicies } from "./tools/policy-merge.js";
 
 const ensureDir = (dir: string) => {
   fs.mkdirSync(dir, { recursive: true });
-};
-
-const mergeToolPolicies = (
-  ...policies: Array<ToolContext["toolPolicy"] | undefined>
-): ToolContext["toolPolicy"] => {
-  let allow: string[] | undefined;
-  const deny = new Set<string>();
-
-  for (const policy of policies) {
-    const policyAllow = policy?.allow?.filter(Boolean) ?? [];
-    if (policyAllow.length > 0) {
-      allow = allow
-        ? allow.filter((entry) => policyAllow.includes(entry))
-        : [...policyAllow];
-    }
-    for (const entry of policy?.deny ?? []) {
-      if (entry) {
-        deny.add(entry);
-      }
-    }
-  }
-
-  return {
-    ...(allow ? { allow: [...new Set(allow)] } : {}),
-    ...(deny.size > 0 ? { deny: [...deny] } : {})
-  };
 };
 
 const formatMcpResult = (result: unknown): string => {

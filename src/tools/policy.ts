@@ -7,6 +7,7 @@ import {
   isMcpToolAllowed,
   parseMcpToolFullName
 } from "../mcp/allowlist.js";
+import { getToolPolicyAllowGroups, matchesAnyToolPattern } from "./policy-merge.js";
 
 export type PolicyDecision = {
   allowed: boolean;
@@ -40,17 +41,6 @@ const NON_ADMIN_PROTECTED_WRITE_PATHS = new Set([
 const NON_ADMIN_PROTECTED_WRITE_PREFIXES = [
   "skills/"
 ];
-
-const compileToolPattern = (pattern: string): RegExp => {
-  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
-  return new RegExp(`^${escaped}$`);
-};
-
-const matchesToolPattern = (toolName: string, pattern: string) =>
-  compileToolPattern(pattern).test(toolName);
-
-const matchesAnyToolPattern = (toolName: string, patterns: string[] | undefined) =>
-  (patterns ?? []).some((pattern) => matchesToolPattern(toolName, pattern));
 
 const toWorkspaceRelativePath = (
   workspaceDir: string,
@@ -209,12 +199,10 @@ export class DefaultToolPolicyEngine implements ToolPolicyEngine {
       return deny(`Tool '${toolName}' is denied by profile tool policy.`);
     }
 
-    if (
-      ctx.toolPolicy?.allow &&
-      ctx.toolPolicy.allow.length > 0 &&
-      !matchesAnyToolPattern(toolName, ctx.toolPolicy.allow)
-    ) {
-      return deny(`Tool '${toolName}' is not allowed by profile tool policy.`);
+    for (const allowGroup of getToolPolicyAllowGroups(ctx.toolPolicy)) {
+      if (allowGroup.length === 0 || !matchesAnyToolPattern(toolName, allowGroup)) {
+        return deny(`Tool '${toolName}' is not allowed by profile tool policy.`);
+      }
     }
 
     return allow();

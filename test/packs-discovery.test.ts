@@ -226,6 +226,7 @@ test("pack env and tool policy merges are deterministic", () => {
   ]);
   assert.deepEqual(mergePackToolPolicies(graph), {
     allow: ["group:web"],
+    allowGroups: [["group:web", "group:memory"], ["group:web"]],
     deny: ["shell.exec", "fs.write"],
     elevated: { enabled: false }
   });

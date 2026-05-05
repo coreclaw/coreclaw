@@ -10,6 +10,7 @@ import { taskTools } from "../src/tools/builtins/tasks.js";
 import { webTools } from "../src/tools/builtins/web.js";
 import { builtInTools } from "../src/tools/builtins/index.js";
 import { createStorageFixture, createToolContext } from "./test-utils.js";
+import { mergeToolPolicies } from "../src/tools/policy-merge.js";
 
 test("policy engine denies shell.exec for normal role", async () => {
   const fixture = createStorageFixture({
@@ -149,6 +150,18 @@ test("policy engine enforces profile tool allow and deny lists", async () => {
     );
 
     context.toolPolicy = { allow: ["memory.*"] };
+    await assert.rejects(
+      registry.execute("fs.list", {}, context),
+      /not allowed by profile tool policy/
+    );
+
+    context.toolPolicy = mergeToolPolicies({ allow: ["fs.*"] }, { allow: ["fs.read"] });
+    await assert.rejects(
+      registry.execute("fs.list", {}, context),
+      /not allowed by profile tool policy/
+    );
+
+    context.toolPolicy = mergeToolPolicies({ allow: ["fs.*"] }, { allow: ["memory.*"] });
     await assert.rejects(
       registry.execute("fs.list", {}, context),
       /not allowed by profile tool policy/

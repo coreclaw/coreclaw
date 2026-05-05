@@ -56,6 +56,7 @@ export type ToolContext = {
   toolPolicy?: {
     allow?: string[];
     deny?: string[];
+    allowGroups?: string[][];
   };
   skills: SkillIndexEntry[];
   isolatedRuntime?: IsolatedToolRuntime;
