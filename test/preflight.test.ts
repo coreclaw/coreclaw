@@ -81,6 +81,36 @@ test("runPreflightChecks reports bindings that target missing or disabled profil
   }
 });
 
+test("runPreflightChecks skips disabled profile workspace file checks", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "coreclaw-preflight-disabled-workspace-"));
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(root);
+    runWorkclawInit(root);
+    const configPath = path.join(root, "config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    config.profiles.list.push({
+      id: "archived",
+      name: "Archived",
+      role: "qa",
+      workspace: "./missing-archived-workspace",
+      disabled: true
+    });
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+    const report = runPreflightChecks();
+    assert.equal(report.identityFilePresent, true);
+    assert.equal(report.toolsFilePresent, true);
+    assert.equal(
+      report.warnings.some((warning) => warning.includes("archived")),
+      false
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("coreclaw preflight command accepts missing MCP config file", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "coreclaw-preflight-missing-"));
   try {

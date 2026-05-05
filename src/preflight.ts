@@ -45,11 +45,12 @@ export const runPreflightChecks = (options: PreflightOptions = {}): PreflightRep
   const workspaceExists = fs.existsSync(workspaceDir);
   const providerApiKeyPresent = Boolean(config.provider.apiKey?.trim());
   const profiles = resolveProfilesConfig(config);
+  const activeProfiles = profiles.filter((profile) => !profile.disabled);
   const bindingProfileIssues = collectBindingProfileIssues(config.bindings, profiles);
-  const profileIdentityChecks = profiles.map((profile) =>
+  const profileIdentityChecks = activeProfiles.map((profile) =>
     fs.existsSync(path.join(profile.workspaceDir, "IDENTITY.md"))
   );
-  const profileToolsChecks = profiles.map((profile) =>
+  const profileToolsChecks = activeProfiles.map((profile) =>
     fs.existsSync(path.join(profile.workspaceDir, "TOOLS.md"))
   );
   const identityFilePresent =
@@ -65,7 +66,7 @@ export const runPreflightChecks = (options: PreflightOptions = {}): PreflightRep
   if (!workspaceExists) {
     warnings.push(`Workspace directory does not exist yet: ${workspaceDir}`);
   }
-  for (const profile of profiles) {
+  for (const profile of activeProfiles) {
     if (!fs.existsSync(path.join(profile.workspaceDir, "IDENTITY.md"))) {
       warnings.push(`Profile ${profile.id} is missing IDENTITY.md: ${profile.workspaceDir}`);
     }
