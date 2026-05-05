@@ -1,3 +1,4 @@
+import path from "node:path";
 import { SqliteStorage } from "./storage/sqlite.js";
 import {
   materializeLocalProfilesConfig,
@@ -67,8 +68,21 @@ export const runPackInfo = (packId: string) => {
   };
 };
 
-const withLocalStorage = <T>(action: (storage: SqliteStorage) => T): T => {
-  const config = loadConfig();
+const withRootDir = <T>(rootDir: string, action: (resolvedRootDir: string) => T): T => {
+  const resolvedRootDir = path.resolve(rootDir);
+  const previousCwd = process.cwd();
+  process.chdir(resolvedRootDir);
+  try {
+    return action(resolvedRootDir);
+  } finally {
+    process.chdir(previousCwd);
+  }
+};
+
+const withLocalStorage = <T>(
+  config: ReturnType<typeof loadConfig>,
+  action: (storage: SqliteStorage) => T
+): T => {
   const storage = new SqliteStorage(config);
   storage.init();
   try {
@@ -117,10 +131,14 @@ export const runPackInstall = (packId: string) => {
   if (!pack) {
     throw new Error(`Unknown pack: ${packId}`);
   }
-  return withLocalStorage((storage) => recordDiscoveredPackInstall(storage, pack));
+  return withLocalStorage(config, (storage) => recordDiscoveredPackInstall(storage, pack));
 };
 
-export const runPackEnable = (packId: string, profileId: string, rootDir: string = process.cwd()) => {
+export const runPackEnable = (
+  packId: string,
+  profileId: string,
+  rootDir: string = process.cwd()
+) => withRootDir(rootDir, (resolvedRootDir) => {
   const config = loadConfig();
   const discovered = discoverWorkclawPacks(config);
   const pack = discovered.find((entry) => entry.id === packId);
@@ -132,7 +150,7 @@ export const runPackEnable = (packId: string, profileId: string, rootDir: string
   }
   ensureAllowedPackGraph(packId, discovered, config.packs.strict);
 
-  const localConfig = readLocalConfigFile(rootDir);
+  const localConfig = readLocalConfigFile(resolvedRootDir);
   const profiles = materializeLocalProfilesConfig(localConfig);
   const list = profiles.list ?? [];
   const profile = list.find((entry) => entry.id === profileId);
@@ -143,7 +161,7 @@ export const runPackEnable = (packId: string, profileId: string, rootDir: string
   if (!currentPacks.includes(packId)) {
     profile.packs = [...currentPacks, packId];
   }
-  const configPath = writeLocalConfigFile(rootDir, {
+  const configPath = writeLocalConfigFile(resolvedRootDir, {
     ...localConfig,
     profiles: {
       ...profiles,
@@ -151,7 +169,7 @@ export const runPackEnable = (packId: string, profileId: string, rootDir: string
     }
   });
 
-  const enablement = withLocalStorage((storage) => {
+  const enablement = withLocalStorage(config, (storage) => {
     recordDiscoveredPackInstall(storage, pack);
     return enablePackForProfile(storage, profileId, packId);
   });
@@ -160,11 +178,15 @@ export const runPackEnable = (packId: string, profileId: string, rootDir: string
     configPath,
     enablement
   };
-};
+});
 
-export const runPackDisable = (packId: string, profileId: string, rootDir: string = process.cwd()) => {
+export const runPackDisable = (
+  packId: string,
+  profileId: string,
+  rootDir: string = process.cwd()
+) => withRootDir(rootDir, (resolvedRootDir) => {
   const config = loadConfig();
-  const localConfig = readLocalConfigFile(rootDir);
+  const localConfig = readLocalConfigFile(resolvedRootDir);
   const profiles = materializeLocalProfilesConfig(localConfig);
   const list = profiles.list ?? [];
   const profile = list.find((entry) => entry.id === profileId);
@@ -183,17 +205,17 @@ export const runPackDisable = (packId: string, profileId: string, rootDir: strin
     );
   }
   profile.packs = nextPacks;
-  const configPath = writeLocalConfigFile(rootDir, {
+  const configPath = writeLocalConfigFile(resolvedRootDir, {
     ...localConfig,
     profiles: {
       ...profiles,
       list
     }
   });
-  withLocalStorage((storage) => disablePackForProfile(storage, profileId, packId));
+  withLocalStorage(config, (storage) => disablePackForProfile(storage, profileId, packId));
   return {
     configPath,
     profileId,
     packId
   };
-};
+});

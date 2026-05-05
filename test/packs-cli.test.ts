@@ -91,6 +91,40 @@ test("pack install and enable commands persist pack state and profile config", (
   }
 });
 
+test("pack enable and disable honor explicit rootDir when cwd differs", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-pack-cli-root-"));
+  const otherRoot = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-pack-cli-other-"));
+  const previousCwd = process.cwd();
+  try {
+    runWorkclawInit(root);
+    const packRoot = path.join(root, "builtin-packs", "engineering-common");
+    fs.mkdirSync(packRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(packRoot, "workclaw.pack.json"),
+      JSON.stringify({ id: "engineering-common", type: "role-pack", description: "base" }),
+      "utf-8"
+    );
+
+    process.chdir(otherRoot);
+    const enable = runPackEnable("engineering-common", "main", root);
+    assert.equal(process.cwd(), fs.realpathSync(otherRoot));
+    const config = JSON.parse(fs.readFileSync(path.join(root, "config.json"), "utf-8"));
+    assert.equal(enable.enablement.packId, "engineering-common");
+    assert.ok(config.profiles.list[0].packs.includes("engineering-common"));
+    assert.ok(fs.existsSync(path.join(root, "data", "bot.sqlite")));
+    assert.equal(fs.existsSync(path.join(otherRoot, "data", "bot.sqlite")), false);
+
+    const disable = runPackDisable("engineering-common", "main", root);
+    const configAfterDisable = JSON.parse(fs.readFileSync(path.join(root, "config.json"), "utf-8"));
+    assert.equal(disable.packId, "engineering-common");
+    assert.deepEqual(configAfterDisable.profiles.list[0].packs, []);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(otherRoot, { recursive: true, force: true });
+  }
+});
+
 test("pack enable materializes implicit main profile for legacy config", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-pack-cli-legacy-"));
   const previousCwd = process.cwd();
