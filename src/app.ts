@@ -37,7 +37,8 @@ import { discoverWorkclawPacks } from "./packs/discovery.js";
 import {
   loadProfilePackGraph,
   buildEffectiveMcpConfig,
-  buildMcpServerProfileScopes
+  buildMcpServerProfileScopes,
+  listMcpFragmentConfigFiles
 } from "./packs/loader.js";
 import { recordDiscoveredPackInstall, enablePackForProfile } from "./packs/install.js";
 import { resolveRuntimeToolPolicy } from "./packs/policy.js";
@@ -340,7 +341,10 @@ export const createCoreclawApp = async (
 
   const readMcpConfigSignature = () => {
     try {
-      const inputs = [baseMcpConfigPath, ...listPackMcpFragments()]
+      const fragmentConfigFiles = listPackMcpFragments().flatMap((fragmentPath) =>
+        listMcpFragmentConfigFiles(fragmentPath)
+      );
+      const inputs = [baseMcpConfigPath, ...fragmentConfigFiles]
         .filter((entry) => fs.existsSync(entry))
         .map((entry) => {
           const stat = fs.statSync(entry);

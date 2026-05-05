@@ -30,24 +30,19 @@ export const loadProfilePackGraph = (
   };
 };
 
-const readMcpFragment = (fragmentPath: string): McpConfigFile => {
-  const stat = fs.statSync(fragmentPath);
-  if (stat.isDirectory()) {
-    const merged: McpConfigFile = { servers: {} };
-    const entries = fs
-      .readdirSync(fragmentPath, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-      .sort((a, b) => a.name.localeCompare(b.name));
-    for (const entry of entries) {
-      const parsed = parseMcpConfigJson(
-        fs.readFileSync(path.join(fragmentPath, entry.name), "utf-8")
-      );
-      Object.assign(merged.servers, parsed.servers);
-    }
-    return merged;
+export const listMcpFragmentConfigFiles = (fragmentPath: string): string[] => {
+  if (!fs.existsSync(fragmentPath)) {
+    return [];
   }
-
-  return parseMcpConfigJson(fs.readFileSync(fragmentPath, "utf-8"));
+  const stat = fs.statSync(fragmentPath);
+  if (!stat.isDirectory()) {
+    return [fragmentPath];
+  }
+  return fs
+    .readdirSync(fragmentPath, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((entry) => path.join(fragmentPath, entry.name));
 };
 
 const stableStringify = (value: unknown): string => {
@@ -79,6 +74,28 @@ const assertCompatibleMcpServer = (
     throw new Error(`MCP server '${server}' has conflicting definitions; use unique server names in ${source}.`);
   }
   return true;
+};
+
+const readMcpFragment = (fragmentPath: string): McpConfigFile => {
+  const stat = fs.statSync(fragmentPath);
+  if (stat.isDirectory()) {
+    const merged: McpConfigFile = { servers: {} };
+    const serverSignatures = new Map<string, string>();
+    for (const filePath of listMcpFragmentConfigFiles(fragmentPath)) {
+      const parsed = parseMcpConfigJson(
+        fs.readFileSync(filePath, "utf-8")
+      );
+      for (const [server, serverConfig] of Object.entries(parsed.servers)) {
+        if (assertCompatibleMcpServer(serverSignatures, server, serverConfig, filePath)) {
+          continue;
+        }
+        merged.servers[server] = serverConfig;
+      }
+    }
+    return merged;
+  }
+
+  return parseMcpConfigJson(fs.readFileSync(fragmentPath, "utf-8"));
 };
 
 export const buildEffectiveMcpConfig = (

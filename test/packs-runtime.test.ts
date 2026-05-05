@@ -8,6 +8,7 @@ import { createCoreclawApp } from "../src/app.js";
 import {
   buildEffectiveMcpConfig,
   buildMcpServerProfileScopes,
+  listMcpFragmentConfigFiles,
   loadProfilePackGraph
 } from "../src/packs/loader.js";
 import { enablePackForProfile, recordDiscoveredPackInstall } from "../src/packs/install.js";
@@ -82,6 +83,10 @@ test("pack MCP fragments merge into effective runtime MCP config", () => {
       "utf-8"
     );
 
+    assert.deepEqual(listMcpFragmentConfigFiles(fragmentDir).map((entry) => path.basename(entry)), [
+      "gitlab.json"
+    ]);
+
     const merged = buildEffectiveMcpConfig(
       {
         servers: {
@@ -95,6 +100,39 @@ test("pack MCP fragments merge into effective runtime MCP config", () => {
     );
 
     assert.deepEqual(Object.keys(merged.servers).sort(), ["base", "gitlab"]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("pack MCP directory fragments reject conflicting server definitions", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workclaw-pack-mcp-dir-conflict-"));
+  try {
+    const fragmentDir = path.join(root, "mcp");
+    fs.mkdirSync(fragmentDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(fragmentDir, "a.json"),
+      JSON.stringify({
+        servers: {
+          shared: { command: "node", args: ["a.js"] }
+        }
+      }),
+      "utf-8"
+    );
+    fs.writeFileSync(
+      path.join(fragmentDir, "b.json"),
+      JSON.stringify({
+        servers: {
+          shared: { command: "node", args: ["b.js"] }
+        }
+      }),
+      "utf-8"
+    );
+
+    assert.throws(
+      () => buildEffectiveMcpConfig(null, [{ mcpFragments: [fragmentDir] }]),
+      /MCP server 'shared' has conflicting definitions/
+    );
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
