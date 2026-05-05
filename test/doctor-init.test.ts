@@ -103,11 +103,19 @@ test("runDoctorChecks reports disabled profiles without resolving their pack gra
       packs: ["missing-pack"],
       disabled: true
     });
+    config.bindings = [
+      { id: "archived-binding", profileId: "archived", match: { surface: "cli" } },
+      { id: "missing-binding", profileId: "missing", match: { surface: "cli" } }
+    ];
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
 
     const report = runDoctorChecks();
     assert.equal(report.profiles.find((profile) => profile.id === "archived")?.disabled, true);
     assert.deepEqual(report.packs.effectiveGraphs, [{ profileId: "main", graph: [] }]);
+    assert.deepEqual(report.bindings.profileIssues, [
+      { bindingId: "archived-binding", profileId: "archived", reason: "disabled" },
+      { bindingId: "missing-binding", profileId: "missing", reason: "missing" }
+    ]);
     assert.equal(
       report.warnings.some((warning) => warning.includes("archived workspace is missing")),
       false

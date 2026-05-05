@@ -626,3 +626,95 @@ test("ConversationRouter drops duplicated binding events within dedupe window", 
     fixture.cleanup();
   }
 });
+
+test("ConversationRouter skips bindings that target disabled profiles", async () => {
+  const fixture = createStorageFixture({
+    bindings: [
+      {
+        id: "binding.disabled",
+        profileId: "archived",
+        match: { surface: "review" }
+      },
+      {
+        id: "binding.active",
+        profileId: "main",
+        match: { surface: "review" }
+      }
+    ],
+    profiles: {
+      list: [
+        {
+          id: "main",
+          name: "Main",
+          role: "general",
+          workspace: "workspace",
+          stateDir: "data"
+        },
+        {
+          id: "archived",
+          name: "Archived",
+          role: "qa",
+          disabled: true
+        }
+      ]
+    },
+    bus: {
+      pollMs: 10,
+      batchSize: 20,
+      maxAttempts: 3,
+      retryBackoffMs: 10,
+      maxRetryBackoffMs: 100,
+      processingTimeoutMs: 500,
+      maxPendingInbound: 5_000,
+      maxPendingOutbound: 5_000,
+      overloadPendingThreshold: 2_000,
+      overloadBackoffMs: 500,
+      perChatRateLimitWindowMs: 60_000,
+      perChatRateLimitMax: 120
+    }
+  });
+  const provider = new MockProvider(async () => ({ content: "processed" }));
+  const runtime = new AgentRuntime(provider, new ToolRegistry(), fixture.config, logger);
+  const mcp = new McpManager({ logger });
+  const isolatedRuntime = new IsolatedToolRuntime(fixture.config, logger);
+  const contextBuilder = new ContextBuilder(fixture.storage, fixture.config, fixture.workspaceDir);
+  const bus = new MessageBus(fixture.storage, fixture.config, logger);
+  const router = new ConversationRouter(
+    fixture.storage,
+    contextBuilder,
+    runtime,
+    mcp,
+    bus,
+    logger,
+    fixture.config,
+    [],
+    isolatedRuntime
+  );
+  bus.onInbound(router.handleInbound);
+
+  try {
+    bus.start();
+    bus.publishInbound({
+      id: "evt-disabled-binding",
+      channel: "webhook",
+      chatId: "review-1",
+      senderId: "review",
+      content: "run",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        surface: "review"
+      }
+    });
+
+    await waitUntil(() => fixture.storage.listOutboundActions().length >= 1);
+    const outboundAction = fixture.storage.listOutboundActions()[0];
+    assert.equal(outboundAction?.bindingId, "binding.active");
+    assert.equal(outboundAction?.profileId, "main");
+    assert.equal(fixture.storage.countBusMessagesByStatus("inbound").dead_letter, 0);
+  } finally {
+    bus.stop();
+    await isolatedRuntime.shutdown();
+    await mcp.shutdown();
+    fixture.cleanup();
+  }
+});

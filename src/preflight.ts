@@ -5,6 +5,10 @@ import { readMcpConfigFile } from "./mcp/config.js";
 import { enforceSecurityProfile } from "./security/gate.js";
 import { resolveProfilesConfig } from "./profiles/resolve.js";
 import { runPackPreflightChecks } from "./preflight-packs.js";
+import {
+  collectBindingProfileIssues,
+  type WorkclawBindingProfileIssue
+} from "./bindings/validate.js";
 
 export type PreflightOptions = {
   mcpConfigPath?: string;
@@ -23,6 +27,7 @@ export type PreflightReport = {
   bindingsCount: number;
   packCount: number;
   profileGraphs: Array<{ profileId: string; graph: string[] }>;
+  bindingProfileIssues: WorkclawBindingProfileIssue[];
   mcpFragmentCount: number;
   missingRequiredEnv: string[];
   templateIssues: string[];
@@ -40,6 +45,7 @@ export const runPreflightChecks = (options: PreflightOptions = {}): PreflightRep
   const workspaceExists = fs.existsSync(workspaceDir);
   const providerApiKeyPresent = Boolean(config.provider.apiKey?.trim());
   const profiles = resolveProfilesConfig(config);
+  const bindingProfileIssues = collectBindingProfileIssues(config.bindings, profiles);
   const profileIdentityChecks = profiles.map((profile) =>
     fs.existsSync(path.join(profile.workspaceDir, "IDENTITY.md"))
   );
@@ -82,6 +88,11 @@ export const runPreflightChecks = (options: PreflightOptions = {}): PreflightRep
   for (const issue of packReport.bundleIssues) {
     warnings.push(issue);
   }
+  for (const issue of bindingProfileIssues) {
+    warnings.push(
+      `Binding ${issue.bindingId} references ${issue.reason} profile: ${issue.profileId}`
+    );
+  }
 
   return {
     resolvedMcpConfigPath,
@@ -96,6 +107,7 @@ export const runPreflightChecks = (options: PreflightOptions = {}): PreflightRep
     bindingsCount: config.bindings.length,
     packCount: packReport.packCount,
     profileGraphs: packReport.profileGraphs,
+    bindingProfileIssues,
     mcpFragmentCount: packReport.mcpFragmentCount,
     missingRequiredEnv: packReport.missingRequiredEnv,
     templateIssues: packReport.templateIssues,

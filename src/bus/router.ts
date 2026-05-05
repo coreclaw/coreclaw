@@ -6,8 +6,10 @@ import type { AgentRuntime } from "../agent/runtime.js";
 import { BusDeferMessageError, type MessageBus } from "./bus.js";
 import type { Config } from "../config/schema.js";
 import { resolveBinding } from "../bindings/resolve.js";
+import { collectBindingProfileIssues, filterBindingsForActiveProfiles } from "../bindings/validate.js";
 import type {
   RoutedWorkclawEvent,
+  WorkclawBinding,
   WorkclawEvent,
   WorkclawRoutingHints
 } from "../bindings/types.js";
@@ -27,6 +29,7 @@ import type { McpReloadRequest, McpReloadResult, ToolContext } from "../tools/re
 import type { RuntimeTelemetry } from "../observability/telemetry.js";
 import type { HeartbeatController } from "../heartbeat/service.js";
 import { enqueueOutboundAction } from "../outbound/queue.js";
+import { resolveProfilesConfig } from "../profiles/resolve.js";
 
 class SerialQueue {
   private tail = Promise.resolve();
@@ -86,6 +89,7 @@ export class ConversationRouter {
   private bindingDedupeSeenAtMs = new Map<string, number>();
   private bindingCooldownUntilMs = new Map<string, number>();
   private bindingInFlight = new Map<string, number>();
+  private routableBindings: WorkclawBinding[];
 
   constructor(
     private storage: SqliteStorage,
@@ -104,6 +108,19 @@ export class ConversationRouter {
     queueOptions?: Partial<RouterQueueOptions>,
     private toolPolicyResolver?: (profileId?: string) => ToolContext["toolPolicy"]
   ) {
+    const profiles = resolveProfilesConfig(this.config);
+    this.routableBindings = filterBindingsForActiveProfiles(this.config.bindings, profiles);
+    for (const issue of collectBindingProfileIssues(this.config.bindings, profiles)) {
+      this.logger.warn(
+        {
+          bindingId: issue.bindingId,
+          profileId: issue.profileId,
+          reason: issue.reason
+        },
+        "binding skipped because profile is not active"
+      );
+    }
+
     const merged: RouterQueueOptions = {
       ...DEFAULT_ROUTER_QUEUE_OPTIONS,
       ...queueOptions
@@ -180,7 +197,7 @@ export class ConversationRouter {
   private async processMessage(message: InboundMessage) {
     const event = this.normalizeInboundEvent(message);
     const routingHints = this.extractRoutingHints(message);
-    const binding = resolveBinding(event, this.config.bindings, routingHints);
+    const binding = resolveBinding(event, this.routableBindings, routingHints);
     const policyEntry = this.enterBindingPolicy(binding);
     if (policyEntry.drop) {
       this.logger.info(
@@ -533,7 +550,7 @@ export class ConversationRouter {
 
   private resolveQueueKey(message: InboundMessage): string {
     const event = this.normalizeInboundEvent(message);
-    const binding = resolveBinding(event, this.config.bindings, this.extractRoutingHints(message));
+    const binding = resolveBinding(event, this.routableBindings, this.extractRoutingHints(message));
     const profileId = binding?.profileId ?? this.resolveConversationProfileId(message);
     const chatId = binding?.conversationKey ?? message.chatId;
     return `${profileId}:${message.channel}:${chatId}`;

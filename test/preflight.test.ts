@@ -7,6 +7,7 @@ import { runCli } from "../src/bin.js";
 import { runPreflightChecks } from "../src/preflight.js";
 import { runPackPreflightChecks } from "../src/preflight-packs.js";
 import { createConfig } from "./test-utils.js";
+import { runWorkclawInit } from "../src/install/init.js";
 
 const writePack = (rootDir: string, manifest: Record<string, unknown>) => {
   fs.mkdirSync(rootDir, { recursive: true });
@@ -35,6 +36,7 @@ test("runPreflightChecks validates explicit MCP config path", () => {
     assert.equal(typeof report.bindingsCount, "number");
     assert.equal(typeof report.packCount, "number");
     assert.ok(Array.isArray(report.profileGraphs));
+    assert.ok(Array.isArray(report.bindingProfileIssues));
     assert.equal(typeof report.mcpFragmentCount, "number");
     assert.ok(Array.isArray(report.missingRequiredEnv));
     assert.ok(Array.isArray(report.templateIssues));
@@ -42,6 +44,39 @@ test("runPreflightChecks validates explicit MCP config path", () => {
     assert.equal(typeof report.surfaceAuthConsistent, "boolean");
     assert.ok(Array.isArray(report.warnings));
   } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runPreflightChecks reports bindings that target missing or disabled profiles", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "coreclaw-preflight-binding-profiles-"));
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(root);
+    runWorkclawInit(root);
+    const configPath = path.join(root, "config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    config.profiles.list.push({
+      id: "archived",
+      name: "Archived",
+      role: "qa",
+      disabled: true
+    });
+    config.bindings = [
+      { id: "archived-binding", profileId: "archived", match: { surface: "cli" } },
+      { id: "missing-binding", profileId: "missing", match: { surface: "cli" } }
+    ];
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+    const report = runPreflightChecks();
+    assert.deepEqual(report.bindingProfileIssues, [
+      { bindingId: "archived-binding", profileId: "archived", reason: "disabled" },
+      { bindingId: "missing-binding", profileId: "missing", reason: "missing" }
+    ]);
+    assert.ok(report.warnings.some((warning) => warning.includes("archived-binding")));
+    assert.ok(report.warnings.some((warning) => warning.includes("missing-binding")));
+  } finally {
+    process.chdir(previousCwd);
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

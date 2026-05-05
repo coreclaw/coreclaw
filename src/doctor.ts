@@ -5,6 +5,10 @@ import { discoverWorkclawPacks } from "./packs/discovery.js";
 import { resolveEffectivePackGraph } from "./packs/graph.js";
 import { SqliteStorage } from "./storage/sqlite.js";
 import { readMcpConfigFile } from "./mcp/config.js";
+import {
+  collectBindingProfileIssues,
+  type WorkclawBindingProfileIssue
+} from "./bindings/validate.js";
 
 export type DoctorReport = {
   runtime: {
@@ -28,6 +32,7 @@ export type DoctorReport = {
     count: number;
     ids: string[];
     surfaces: string[];
+    profileIssues: WorkclawBindingProfileIssue[];
   };
   outbound: {
     queued: number;
@@ -80,8 +85,15 @@ export const runDoctorChecks = (): DoctorReport => {
       enabledPackIds: profile.enabledPackIds,
       disabled: profile.disabled
     }));
+    const resolvedProfiles = resolveProfilesConfig(config);
+    const bindingProfileIssues = collectBindingProfileIssues(config.bindings, resolvedProfiles);
     const discovered = discoverWorkclawPacks(config);
-    const warnings = [...discovered.flatMap((pack) => pack.warnings)];
+    const warnings = [
+      ...discovered.flatMap((pack) => pack.warnings),
+      ...bindingProfileIssues.map(
+        (issue) => `Binding ${issue.bindingId} references ${issue.reason} profile: ${issue.profileId}`
+      )
+    ];
     const effectiveGraphs: Array<{ profileId: string; graph: string[] }> = [];
     const profileRuntimeHealth: Array<{ profileId: string; status: "ok" | "warning" }> = [];
     for (const profile of profiles.filter((entry) => !entry.disabled)) {
@@ -128,7 +140,8 @@ export const runDoctorChecks = (): DoctorReport => {
       bindings: {
         count: config.bindings.length,
         ids: config.bindings.map((binding) => binding.id),
-        surfaces: bindingSurfaces
+        surfaces: bindingSurfaces,
+        profileIssues: bindingProfileIssues
       },
       outbound,
       surfaces: {

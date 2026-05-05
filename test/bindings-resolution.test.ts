@@ -4,6 +4,7 @@ import { resolveBinding } from "../src/bindings/resolve.js";
 import { renderBindingTemplate } from "../src/bindings/template.js";
 import { getBindingTier } from "../src/bindings/match.js";
 import { WorkclawBindingActionSchema, WorkclawBindingPolicySchema } from "../src/bindings/schema.js";
+import { collectBindingProfileIssues, filterBindingsForActiveProfiles } from "../src/bindings/validate.js";
 
 const event = {
   id: "evt-1",
@@ -126,6 +127,61 @@ test("WorkclawBindingActionSchema rejects unimplemented task enqueue mode", () =
   assert.throws(
     () => WorkclawBindingActionSchema.parse({ mode: "task-enqueue" }),
     /Invalid option/
+  );
+});
+
+test("binding profile validation detects missing and disabled profile targets", () => {
+  const bindings = [
+    { id: "active", profileId: "main", match: { surface: "cli" } },
+    { id: "archived-route", profileId: "archived", match: { surface: "cli" } },
+    { id: "missing-route", profileId: "missing", match: { surface: "cli" } }
+  ];
+  const profiles = [
+    {
+      id: "main",
+      name: "Main",
+      role: "general",
+      teamIds: [],
+      teamWorkspaces: [],
+      workspaceDir: "/tmp/main",
+      stateDir: "/tmp/main-state",
+      enabledPackIds: [],
+      sandbox: {},
+      memory: {},
+      bootstrap: {},
+      scheduler: {},
+      surfaces: {},
+      toolPolicy: {},
+      metadata: {},
+      disabled: false
+    },
+    {
+      id: "archived",
+      name: "Archived",
+      role: "qa",
+      teamIds: [],
+      teamWorkspaces: [],
+      workspaceDir: "/tmp/archived",
+      stateDir: "/tmp/archived-state",
+      enabledPackIds: [],
+      sandbox: {},
+      memory: {},
+      bootstrap: {},
+      scheduler: {},
+      surfaces: {},
+      toolPolicy: {},
+      metadata: {},
+      disabled: true
+    }
+  ];
+
+  assert.deepEqual(collectBindingProfileIssues(bindings, profiles), [
+    { bindingId: "archived-route", profileId: "archived", reason: "disabled" },
+    { bindingId: "missing-route", profileId: "missing", reason: "missing" }
+  ]);
+  assert.deepEqual(
+    filterBindingsForActiveProfiles(bindings, profiles).map((binding) => binding.id),
+    ["active"]
   );
 });
 

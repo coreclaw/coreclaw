@@ -95,6 +95,7 @@ export const runCli = async (
     process.stdout.write(`provider.api_key: ${report.providerApiKeyPresent ? "set" : "missing"}\n`);
     process.stdout.write(`profiles.resolved: ${report.profilesResolved}\n`);
     process.stdout.write(`bindings.count: ${report.bindingsCount}\n`);
+    process.stdout.write(`bindings.profile_issues: ${report.bindingProfileIssues.length}\n`);
     process.stdout.write(`packs.count: ${report.packCount}\n`);
     process.stdout.write(`missing.required_env: ${report.missingRequiredEnv.length}\n`);
     process.stdout.write(`warnings: ${report.warnings.length}\n`);
