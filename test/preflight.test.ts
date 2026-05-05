@@ -5,6 +5,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { runCli } from "../src/bin.js";
 import { runPreflightChecks } from "../src/preflight.js";
+import { runPackPreflightChecks } from "../src/preflight-packs.js";
+import { createConfig } from "./test-utils.js";
+
+const writePack = (rootDir: string, manifest: Record<string, unknown>) => {
+  fs.mkdirSync(rootDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(rootDir, "workclaw.pack.json"),
+    JSON.stringify(manifest, null, 2),
+    "utf-8"
+  );
+};
 
 test("runPreflightChecks validates explicit MCP config path", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "coreclaw-preflight-"));
@@ -63,6 +74,52 @@ test("coreclaw preflight command rejects invalid MCP config", async () => {
       /Invalid MCP config/
     );
   } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("pack preflight checks required env after effective graph merge", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "coreclaw-preflight-pack-env-"));
+  const envName = "WORKCLAW_PREFLIGHT_REQUIRED_OVERRIDE_TEST";
+  const previousEnv = process.env[envName];
+  try {
+    delete process.env[envName];
+    const workspaceDir = path.join(root, "workspace");
+    const dataDir = path.join(root, "data");
+    const packsRoot = path.join(root, "packs");
+    writePack(path.join(packsRoot, "base-pack"), {
+      id: "base-pack",
+      type: "role-pack",
+      description: "base",
+      env: [{ name: envName, required: true }]
+    });
+    writePack(path.join(packsRoot, "child-pack"), {
+      id: "child-pack",
+      type: "role-pack",
+      description: "child",
+      extends: ["base-pack"],
+      env: [{ name: envName, required: false }]
+    });
+    const config = createConfig(workspaceDir, dataDir, {
+      packs: {
+        enabledRoots: [packsRoot]
+      },
+      profiles: {
+        defaults: {
+          packs: ["child-pack"]
+        }
+      }
+    });
+
+    const report = runPackPreflightChecks(config, null);
+    assert.deepEqual(report.profileGraphs, [{ profileId: "main", graph: ["base-pack", "child-pack"] }]);
+    assert.deepEqual(report.missingRequiredEnv, []);
+  } finally {
+    if (previousEnv === undefined) {
+      delete process.env[envName];
+    } else {
+      process.env[envName] = previousEnv;
+    }
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

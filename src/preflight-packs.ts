@@ -2,7 +2,7 @@ import fs from "node:fs";
 import type { Config } from "./config/schema.js";
 import { discoverWorkclawPacks } from "./packs/discovery.js";
 import { buildEffectiveMcpConfig } from "./packs/loader.js";
-import { resolveEffectivePackGraph } from "./packs/graph.js";
+import { mergePackEnvRequirements, resolveEffectivePackGraph } from "./packs/graph.js";
 import { resolveProfilesConfig } from "./profiles/resolve.js";
 import type { McpConfigFile } from "./mcp/types.js";
 
@@ -32,12 +32,12 @@ export const runPackPreflightChecks = (
         strict: config.packs.strict
       }
     );
-    for (const pack of graph) {
-      for (const requirement of pack.manifest.env ?? []) {
-        if (requirement.required && !process.env[requirement.name]?.trim()) {
-          missingRequiredEnv.add(requirement.name);
-        }
+    for (const requirement of mergePackEnvRequirements(graph)) {
+      if (requirement.required && !process.env[requirement.name]?.trim()) {
+        missingRequiredEnv.add(requirement.name);
       }
+    }
+    for (const pack of graph) {
       for (const templateRoot of pack.templateRoots) {
         if (!fs.existsSync(templateRoot)) {
           templateIssues.add(`Missing template root: ${templateRoot}`);
